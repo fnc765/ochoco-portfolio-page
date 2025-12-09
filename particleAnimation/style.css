@@ -131,6 +131,7 @@ body::after {
     flex-direction: column;
     align-items: center;
     gap: 1.5rem;
+    position: relative;
 }
 
 .profile-img {
@@ -151,6 +152,58 @@ body::after {
     font-size: 2rem;
     font-weight: 700;
     letter-spacing: 0.05em;
+}
+
+/* 吹き出し */
+.speech-bubble {
+    position: absolute;
+    top: -70px;
+    left: 50%;
+    transform: translateX(-50%) scale(0);
+    background-color: rgba(255, 255, 255, 0.95);
+    color: #333;
+    padding: 0.8rem 1.2rem;
+    border-radius: 1rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    z-index: 10;
+    pointer-events: none;
+}
+
+.speech-bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid rgba(255, 255, 255, 0.95);
+}
+
+.speech-bubble p {
+    margin: 0;
+    font-weight: 700;
+}
+
+.profile-section:hover .speech-bubble {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+    animation: bounce 0.6s ease;
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateX(-50%) scale(1) translateY(0);
+    }
+    50% {
+        transform: translateX(-50%) scale(1) translateY(-5px);
+    }
 }
 
 /* ===================================
@@ -250,6 +303,12 @@ body::after {
         font-size: 1.8rem;
     }
 
+    .speech-bubble {
+        font-size: 0.9rem;
+        padding: 0.7rem 1rem;
+        top: -65px;
+    }
+
     .social-links {
         max-width: 350px;
     }
@@ -277,6 +336,12 @@ body::after {
 
     .profile-name {
         font-size: 1.5rem;
+    }
+
+    .speech-bubble {
+        font-size: 0.85rem;
+        padding: 0.6rem 0.9rem;
+        top: -60px;
     }
 
     .social-links {
@@ -308,6 +373,12 @@ body::after {
 
     .profile-name {
         font-size: 1.3rem;
+    }
+
+    .speech-bubble {
+        font-size: 0.8rem;
+        padding: 0.5rem 0.8rem;
+        top: -55px;
     }
 
     .social-link {
