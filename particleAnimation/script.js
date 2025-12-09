@@ -86,20 +86,12 @@
 
     draw = function() {
         var d, _i, _len;
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        context.clearRect(0, 0, canvas.width, canvas.height)
-
-        // パーティクルにブラー効果を追加
-        context.filter = 'blur(2px)';
+        context.clearRect(0, 0, canvas.width, canvas.height);
 
         for (_i = 0, _len = drawables.length; _i < _len; _i++) {
             d = drawables[_i];
             d.draw(context);
         }
-
-        // フィルターをリセット
-        context.filter = 'none';
     };
 
     update = function() {
@@ -112,6 +104,13 @@
         return _results;
     };
 
+    // requestAnimationFrameを使用した最適化されたアニメーションループ
+    var animate = function() {
+        update();
+        draw();
+        requestAnimationFrame(animate);
+    };
+
     document.onmousemove = function(e) {
         mouseVX = mouseX;
         mouseVY = mouseY;
@@ -122,9 +121,14 @@
 
     };
 
-    window.addEventListener('resize', draw, false);
-    setInterval(draw, 1000 / 30);
-    setInterval(update, 1000 / 60);
+    // リサイズ時のみcanvasサイズを更新
+    window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }, false);
+
+    // アニメーション開始
+    animate();
 }).call(this);
 
 // ページ読み込み完了時の処理
