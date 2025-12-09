@@ -1,9 +1,38 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" prefix="og: https://ogp.me/ns#">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Portfolio</title>
+    <title>おちょこ - Portfolio</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="おちょこのポートフォリオサイト。VRChat、Note、YouTube、Xでの活動をご紹介します。">
+    <meta name="keywords" content="おちょこ, ochoco, ポートフォリオ, VRChat, Note, YouTube, X">
+    <meta name="author" content="おちょこ">
+    <meta name="robots" content="index, follow">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://yourwebsite.com/">
+    <meta property="og:title" content="おちょこ - Portfolio">
+    <meta property="og:description" content="おちょこのポートフォリオサイト。VRChat、Note、YouTube、Xでの活動をご紹介します。">
+    <meta property="og:image" content="https://yourwebsite.com/images/profile.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://yourwebsite.com/">
+    <meta property="twitter:title" content="おちょこ - Portfolio">
+    <meta property="twitter:description" content="おちょこのポートフォリオサイト。VRChat、Note、YouTube、Xでの活動をご紹介します。">
+    <meta property="twitter:image" content="https://yourwebsite.com/images/profile.png">
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#141414">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,11 +50,11 @@
 </head>
 <body>
     <!-- Particles Container (for Phase 2) -->
-    <div id="particles-js"></div>
+    <div id="particles-js" aria-hidden="true"></div>
 
     <!-- Loading Screen -->
-    <div id="loader">
-        <div class="spinner"></div>
+    <div id="loader" role="status" aria-live="polite" aria-label="ページを読み込んでいます">
+        <div class="spinner" aria-hidden="true"></div>
         <p class="loading-text">Loading...</p>
     </div>
 
@@ -34,26 +63,26 @@
         <div class="container">
             <!-- Profile Section -->
             <header class="profile-section">
-                <img src="images/profile.png" alt="Profile Picture" class="profile-img">
+                <img src="images/profile.png" alt="おちょこのプロフィール画像" class="profile-img">
                 <h1 class="profile-name">おちょこ</h1>
             </header>
 
             <!-- Social Links -->
-            <nav class="social-links">
-                <a href="https://vrchat.com/home/user/" class="social-link" target="_blank" rel="noopener noreferrer">
-                    <i class="fas fa-vr-cardboard"></i>
+            <nav class="social-links" aria-label="ソーシャルメディアリンク">
+                <a href="https://vrchat.com/home/user/" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="VRChatプロフィールを開く（新しいタブ）">
+                    <i class="fas fa-vr-cardboard" aria-hidden="true"></i>
                     <span>VRChat</span>
                 </a>
-                <a href="https://note.com/" class="social-link" target="_blank" rel="noopener noreferrer">
-                    <i class="fas fa-pen-nib"></i>
+                <a href="https://note.com/" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="Noteを開く（新しいタブ）">
+                    <i class="fas fa-pen-nib" aria-hidden="true"></i>
                     <span>Note</span>
                 </a>
-                <a href="https://youtube.com/" class="social-link" target="_blank" rel="noopener noreferrer">
-                    <i class="fab fa-youtube"></i>
+                <a href="https://youtube.com/" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="YouTubeチャンネルを開く（新しいタブ）">
+                    <i class="fab fa-youtube" aria-hidden="true"></i>
                     <span>YouTube</span>
                 </a>
-                <a href="https://twitter.com/" class="social-link" target="_blank" rel="noopener noreferrer">
-                    <i class="fab fa-x-twitter"></i>
+                <a href="https://twitter.com/" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)を開く（新しいタブ）">
+                    <i class="fab fa-x-twitter" aria-hidden="true"></i>
                     <span>X (Twitter)</span>
                 </a>
             </nav>

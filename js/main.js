@@ -140,3 +140,34 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         }
     });
 });
+
+// キーボードナビゲーション対応（Phase 3）
+document.addEventListener('DOMContentLoaded', () => {
+    const socialLinks = document.querySelectorAll('.social-link');
+
+    // フォーカス時のスタイル強化のため、クラスを追加
+    socialLinks.forEach(link => {
+        link.addEventListener('focus', function() {
+            this.classList.add('keyboard-focus');
+        });
+
+        link.addEventListener('blur', function() {
+            this.classList.remove('keyboard-focus');
+        });
+    });
+
+    // Escキーでローディング画面をスキップ（開発用）
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const loader = document.getElementById('loader');
+            if (loader && loader.style.display !== 'none') {
+                loader.style.display = 'none';
+                const content = document.getElementById('content');
+                if (content) {
+                    content.style.display = 'block';
+                    content.classList.add('show');
+                }
+            }
+        }
+    });
+});

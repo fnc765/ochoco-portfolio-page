@@ -2,11 +2,33 @@
    リセット & 基本スタイル
    =================================== */
 
+/*
+ * パフォーマンス最適化のポイント（Phase 3）:
+ * - box-sizing: border-box で計算を簡素化
+ * - will-change は必要最小限に使用（使いすぎるとメモリを消費）
+ * - transform と opacity はGPUアクセラレーションで高速
+ */
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
+
+/*
+ * クロスブラウザ互換性（Phase 3）:
+ * - Flexbox: IE11以外の全モダンブラウザで対応
+ * - CSS Variables: IE11は未対応（当サイトは使用していないため問題なし）
+ * - backdrop-filter: Safari 9+, Chrome 76+, Firefox 103+ で対応
+ * - object-fit: IE11は未対応（画像が歪む可能性あり）
+ *
+ * 対応ブラウザ:
+ * ✅ Chrome 90+
+ * ✅ Firefox 88+
+ * ✅ Safari 14+
+ * ✅ Edge 90+
+ * ❌ Internet Explorer 11（サポート外）
+ */
 
 body {
     font-family: 'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
@@ -60,7 +82,7 @@ body::after {
     top: 0;
     left: 0;
     z-index: 0;
-    pointer-events: none;
+    pointer-events: none; /* 重要: マウスイベントを透過してボタンをクリック可能に */
 }
 
 /* ===================================
@@ -186,6 +208,17 @@ body::after {
     box-shadow: 0 4px 15px rgba(255, 255, 255, 0.1);
 }
 
+/* キーボードフォーカス対応（Phase 3） */
+.social-link:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.8);
+    outline-offset: 2px;
+}
+
+.social-link.keyboard-focus {
+    background-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
 .social-link i {
     font-size: 1.5rem;
     width: 30px;
@@ -241,6 +274,16 @@ body::after {
 /* ===================================
    レスポンシブデザイン
    =================================== */
+
+/*
+ * ブレークポイント設計（Phase 3）:
+ * - 768px: タブレット（iPad縦持ち）
+ * - 600px: 大きめのスマートフォン
+ * - 400px: 小さいスマートフォン
+ *
+ * モバイルファーストではなくデスクトップファーストで設計
+ * 理由: デスクトップのデザインが基準で、それを縮小していく方が直感的
+ */
 
 /* タブレット対応 */
 @media (max-width: 768px) {
