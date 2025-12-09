@@ -88,10 +88,16 @@
         canvas.height = window.innerHeight;
         context.clearRect(0, 0, canvas.width, canvas.height)
 
+        // パーティクルにブラー効果を追加
+        context.filter = 'blur(2px)';
+
         for (_i = 0, _len = drawables.length; _i < _len; _i++) {
             d = drawables[_i];
             d.draw(context);
         }
+
+        // フィルターをリセット
+        context.filter = 'none';
     };
 
     update = function() {
