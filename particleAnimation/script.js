@@ -1,5 +1,7 @@
 "use strict";
 
+//ref: https://codepen.io/Fata-ku/details/GRJRaj
+
 // background animation
 (function() {
 
