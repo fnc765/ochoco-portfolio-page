@@ -192,9 +192,25 @@
         setupRandomMessages() {
             if (!this.profileSection || !this.speechBubbleText) return;
 
+            // PC用：マウスホバー
             this.profileSection.addEventListener('mouseenter', () => {
                 const randomMessage = this.getRandomMessage();
                 this.speechBubbleText.textContent = randomMessage;
+            });
+
+            // スマホ用：タップ
+            this.profileSection.addEventListener('click', (e) => {
+                e.preventDefault();
+                const randomMessage = this.getRandomMessage();
+                this.speechBubbleText.textContent = randomMessage;
+
+                // activeクラスを追加して吹き出しを表示
+                this.profileSection.classList.add('active');
+
+                // 3秒後に非表示
+                setTimeout(() => {
+                    this.profileSection.classList.remove('active');
+                }, 3000);
             });
         }
 

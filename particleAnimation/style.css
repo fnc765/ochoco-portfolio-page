@@ -206,7 +206,8 @@ body::after {
     -ms-user-select: none;
 }
 
-.profile-section:hover .speech-bubble {
+.profile-section:hover .speech-bubble,
+.profile-section.active .speech-bubble {
     transform: translateX(-50%) scale(1);
     opacity: 1;
     animation: bounce 0.6s ease;
