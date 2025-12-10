@@ -146,6 +146,25 @@ window.addEventListener('load', () => {
             loader.style.display = 'none';
             content.style.display = 'block';
             content.classList.add('show');
+
+            // コンテンツ表示後にランダムメッセージ機能を設定
+            const profileSection = document.querySelector('.profile-section');
+            const speechBubbleText = document.querySelector('.speech-bubble p');
+            const messages = [
+                'チョコレートのちょこだよ！',
+                'こんにちは！',
+                'よろしくね！',
+                'チョコが好き！',
+                '今日もいい日だね！',
+                'VRChatで遊ぼう！'
+            ];
+
+            if (profileSection && speechBubbleText) {
+                profileSection.addEventListener('mouseenter', () => {
+                    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                    speechBubbleText.textContent = randomMessage;
+                });
+            }
         }, 500);
     }, 1000);
 });
