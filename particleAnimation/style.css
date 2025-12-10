@@ -155,7 +155,7 @@ body::after {
 }
 
 .profile-name {
-    font-size: 2rem;
+    font-size: 3rem;
     font-weight: 700;
     letter-spacing: 0.05em;
     user-select: none;
