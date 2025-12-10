@@ -132,6 +132,10 @@ body::after {
     align-items: center;
     gap: 1.5rem;
     position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 .profile-img {
@@ -142,9 +146,10 @@ body::after {
     object-fit: cover;
     background-color: #222;
     transition: transform 0.3s ease;
+    pointer-events: none;
 }
 
-.profile-img:hover {
+.profile-section:hover .profile-img {
     transform: scale(1.05);
 }
 
@@ -152,6 +157,10 @@ body::after {
     font-size: 2rem;
     font-weight: 700;
     letter-spacing: 0.05em;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 /* 吹き出し */
@@ -189,6 +198,11 @@ body::after {
 .speech-bubble p {
     margin: 0;
     font-weight: 700;
+    user-select: none;
+    caret-color: transparent;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 .profile-section:hover .speech-bubble {
@@ -229,6 +243,10 @@ body::after {
     text-decoration: none;
     font-size: 1.1rem;
     transition: all 0.3s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 .social-link:hover {
@@ -256,6 +274,10 @@ body::after {
     text-align: center;
     font-size: 0.9rem;
     opacity: 0.7;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 /* ===================================
