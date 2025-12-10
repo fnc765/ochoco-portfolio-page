@@ -160,8 +160,13 @@ window.addEventListener('load', () => {
             ];
 
             if (profileSection && speechBubbleText) {
+                let lastMessage = '';
                 profileSection.addEventListener('mouseenter', () => {
-                    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                    let randomMessage;
+                    do {
+                        randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                    } while (randomMessage === lastMessage && messages.length > 1);
+                    lastMessage = randomMessage;
                     speechBubbleText.textContent = randomMessage;
                 });
             }
