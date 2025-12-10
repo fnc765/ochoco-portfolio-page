@@ -1,269 +1,243 @@
-"use strict";
+(function() {
+    "use strict";
 
-//ref: https://codepen.io/Fata-ku/details/GRJRaj
+    //ref: https://codepen.io/Fata-ku/details/GRJRaj
 
-// ===================================
-// 定数定義
-// ===================================
-const CONFIG = {
-    PARTICLE_COUNT: 200,
-    RADIUS_MIN: 1,
-    RADIUS_MAX: 8,
-    COLORS: ["64, 32, 0", "250, 64, 0", "64, 0, 0", "200, 200, 200"],
-    VELOCITY_DIVISOR: 3,
-    ALPHA_DIVISOR: 3
-};
+    // ===================================
+    // 定数定義
+    // ===================================
+    const CONFIG = {
+        PARTICLE_COUNT: 200,
+        RADIUS_MIN: 1,
+        RADIUS_MAX: 8,
+        COLORS: ["64, 32, 0", "250, 64, 0", "64, 0, 0", "200, 200, 200"],
+        VELOCITY_DIVISOR: 3,
+        ALPHA_DIVISOR: 3
+    };
 
-// ===================================
-// ユーティリティ関数
-// ===================================
-const rand = (a, b) => Math.random() * (b - a) + a;
+    // ===================================
+    // ユーティリティ関数
+    // ===================================
+    const rand = (a, b) => Math.random() * (b - a) + a;
 
-// ===================================
-// Particleクラス
-// ===================================
-class Particle {
-    constructor(canvas, colors) {
-        this.canvas = canvas;
-        this.colors = colors;
-        this.reset();
-    }
-
-    reset() {
-        this.color = this.colors[Math.floor(Math.random() * this.colors.length)];
-        this.radius = rand(CONFIG.RADIUS_MIN, CONFIG.RADIUS_MAX);
-        this.x = rand(0, this.canvas.width);
-        this.y = rand(-20, this.canvas.height * 0.5);
-        this.vx = (-5 + Math.random() * 10) / CONFIG.VELOCITY_DIVISOR;
-        this.vy = (0.7 * this.radius) / CONFIG.VELOCITY_DIVISOR;
-        this.valpha = rand(0.02, 0.09) / CONFIG.ALPHA_DIVISOR;
-        this.opacity = 0;
-        this.life = 0;
-        this.onupdate = undefined;
-        this.type = "dust";
-    }
-
-    update() {
-        this.x += this.vx;
-        this.y += this.vy;
-
-        if (this.opacity >= 1 && this.valpha > 0) {
-            this.valpha *= -1;
-        }
-        this.opacity += this.valpha;
-        this.life += this.valpha;
-
-        if (this.type === "dust") {
-            this.opacity = Math.min(1, Math.max(0, this.opacity));
-        } else {
-            this.opacity = 1;
-        }
-
-        if (this.onupdate) {
-            this.onupdate();
-        }
-
-        if (this.life < 0 || this.radius <= 0 || this.y > this.canvas.height) {
-            this.onupdate = undefined;
+    // ===================================
+    // Particleクラス
+    // ===================================
+    class Particle {
+        constructor(canvas, colors) {
+            this.canvas = canvas;
+            this.colors = colors;
             this.reset();
         }
-    }
 
-    draw(context) {
-        const strokeAlpha = Math.min(this.opacity, 0.85);
-        const fillAlpha = Math.min(this.opacity, 0.65);
-
-        context.strokeStyle = `rgba(${this.color}, ${strokeAlpha})`;
-        context.fillStyle = `rgba(${this.color}, ${fillAlpha})`;
-        context.beginPath();
-        context.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
-        context.fill();
-        context.stroke();
-    }
-}
-
-// ===================================
-// ParticleAnimationクラス
-// ===================================
-class ParticleAnimation {
-    constructor() {
-        this.canvas = document.getElementById("bg");
-        this.context = this.canvas.getContext("2d");
-        this.particles = [];
-        this.mouseX = 0;
-        this.mouseY = 0;
-        this.mouseVX = 0;
-        this.mouseVY = 0;
-
-        this.init();
-        this.setupEventListeners();
-        this.animate();
-    }
-
-    init() {
-        this.resizeCanvas();
-        this.createParticles();
-    }
-
-    resizeCanvas() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
-
-    createParticles() {
-        this.particles = [];
-        for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
-            this.particles.push(new Particle(this.canvas, CONFIG.COLORS));
-        }
-    }
-
-    setupEventListeners() {
-        // リサイズイベント（デバウンス付き）
-        let resizeTimeout;
-        window.addEventListener('resize', () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => {
-                this.resizeCanvas();
-            }, 250);
-        }, false);
-
-        // マウス移動イベント
-        document.addEventListener('mousemove', (e) => {
-            this.mouseVX = this.mouseX;
-            this.mouseVY = this.mouseY;
-            this.mouseX = Math.floor(e.pageX);
-            this.mouseY = Math.floor(e.pageY);
-            this.mouseVX = Math.floor((this.mouseVX - this.mouseX) / 2);
-            this.mouseVY = Math.floor((this.mouseVY - this.mouseY) / 2);
-        });
-    }
-
-    update() {
-        for (const particle of this.particles) {
-            particle.update();
-        }
-    }
-
-    draw() {
-        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        for (const particle of this.particles) {
-            particle.draw(this.context);
-        }
-    }
-
-    animate() {
-        this.update();
-        this.draw();
-        requestAnimationFrame(() => this.animate());
-    }
-}
-
-// パーティクルアニメーション初期化
-new ParticleAnimation();
-
-// ===================================
-// UIコントローラークラス
-// ===================================
-class UIController {
-    constructor() {
-        this.LOADING_DURATION = 1000;
-        this.FADE_DURATION = 500;
-        this.MESSAGES = [
-            'チョコレートのちょこだよ！',
-            'うどんせいばーすき！',
-            'よろしくね！',
-            '赤メガネがトレードマーク！',
-            '仲良くしてね！',
-            'VRChatで遊ぼう！'
-        ];
-
-        this.loader = document.getElementById('loader');
-        this.content = document.getElementById('content');
-        this.profileImg = document.querySelector('.profile-img');
-        this.profileSection = document.querySelector('.profile-section');
-        this.speechBubbleText = document.querySelector('.speech-bubble p');
-        this.lastMessage = '';
-
-        this.init();
-    }
-
-    init() {
-        this.setupLoadingScreen();
-        this.setupProfileImageError();
-        this.setupEscapeKeySkip();
-    }
-
-    setupLoadingScreen() {
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                this.hideLoader();
-            }, this.LOADING_DURATION);
-        });
-    }
-
-    hideLoader() {
-        if (!this.loader || !this.content) return;
-
-        this.loader.style.opacity = '0';
-
-        setTimeout(() => {
-            this.loader.style.display = 'none';
-            this.content.style.display = 'block';
-            this.content.classList.add('show');
-            this.setupRandomMessages();
-        }, this.FADE_DURATION);
-    }
-
-    setupRandomMessages() {
-        if (!this.profileSection || !this.speechBubbleText) return;
-
-        this.profileSection.addEventListener('mouseenter', () => {
-            const randomMessage = this.getRandomMessage();
-            this.speechBubbleText.textContent = randomMessage;
-        });
-    }
-
-    getRandomMessage() {
-        if (this.MESSAGES.length === 1) {
-            return this.MESSAGES[0];
+        reset() {
+            this.color = this.colors[Math.floor(Math.random() * this.colors.length)];
+            this.radius = rand(CONFIG.RADIUS_MIN, CONFIG.RADIUS_MAX);
+            this.x = rand(0, this.canvas.width);
+            this.y = rand(-20, this.canvas.height * 0.5);
+            this.vx = (-5 + Math.random() * 10) / CONFIG.VELOCITY_DIVISOR;
+            this.vy = (0.7 * this.radius) / CONFIG.VELOCITY_DIVISOR;
+            this.valpha = rand(0.02, 0.09) / CONFIG.ALPHA_DIVISOR;
+            this.opacity = 0;
+            this.life = 0;
         }
 
-        let randomMessage;
-        const availableMessages = this.MESSAGES.filter(msg => msg !== this.lastMessage);
-        randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
-        this.lastMessage = randomMessage;
-        return randomMessage;
-    }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
 
-    setupProfileImageError() {
-        if (!this.profileImg) return;
-
-        this.profileImg.addEventListener('error', () => {
-            this.profileImg.style.backgroundColor = '#333';
-            this.profileImg.alt = 'プロフィール画像が見つかりません';
-        });
-    }
-
-    setupEscapeKeySkip() {
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.loader && this.loader.style.display !== 'none') {
-                this.skipLoading();
+            if (this.opacity >= 1 && this.valpha > 0) {
+                this.valpha *= -1;
             }
-        });
-    }
+            this.opacity += this.valpha;
+            this.life += this.valpha;
 
-    skipLoading() {
-        this.loader.style.display = 'none';
-        if (this.content) {
-            this.content.style.display = 'block';
-            this.content.classList.add('show');
+            // opacityを0〜1の範囲に制限
+            this.opacity = Math.min(1, Math.max(0, this.opacity));
+
+            if (this.life < 0 || this.radius <= 0 || this.y > this.canvas.height) {
+                this.reset();
+            }
         }
-        this.setupRandomMessages();
-    }
-}
 
-// UI初期化
-document.addEventListener('DOMContentLoaded', () => {
-    new UIController();
-});
+        draw(context) {
+            const strokeAlpha = Math.min(this.opacity, 0.85);
+            const fillAlpha = Math.min(this.opacity, 0.65);
+
+            context.strokeStyle = `rgba(${this.color}, ${strokeAlpha})`;
+            context.fillStyle = `rgba(${this.color}, ${fillAlpha})`;
+            context.beginPath();
+            context.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
+            context.fill();
+            context.stroke();
+        }
+    }
+
+    // ===================================
+    // ParticleAnimationクラス
+    // ===================================
+    class ParticleAnimation {
+        constructor() {
+            this.canvas = document.getElementById("bg");
+            this.context = this.canvas.getContext("2d");
+            this.particles = [];
+
+            this.init();
+            this.setupEventListeners();
+
+            // 関数をバインドして再利用
+            this.animate = this.animate.bind(this);
+            this.animate();
+        }
+
+        init() {
+            this.resizeCanvas();
+            this.createParticles();
+        }
+
+        resizeCanvas() {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+        }
+
+        createParticles() {
+            this.particles = [];
+            for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
+                this.particles.push(new Particle(this.canvas, CONFIG.COLORS));
+            }
+        }
+
+        setupEventListeners() {
+            // リサイズイベント（デバウンス付き）
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    this.resizeCanvas();
+                }, 250);
+            }, false);
+        }
+
+        animate() {
+            // clearとupdate/drawを1つのループで処理
+            this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+            for (const particle of this.particles) {
+                particle.update();
+                particle.draw(this.context);
+            }
+
+            requestAnimationFrame(this.animate);
+        }
+    }
+
+    // パーティクルアニメーション初期化
+    new ParticleAnimation();
+
+    // ===================================
+    // UIコントローラークラス
+    // ===================================
+    class UIController {
+        constructor() {
+            this.LOADING_DURATION = 1000;
+            this.FADE_DURATION = 500;
+            this.MESSAGES = [
+                'チョコレートのちょこだよ！',
+                'うどんせいばーすき！',
+                'よろしくね！',
+                '赤メガネがトレードマーク！',
+                '仲良くしてね！',
+                'VRChatで遊ぼう！'
+            ];
+
+            this.loader = document.getElementById('loader');
+            this.content = document.getElementById('content');
+            this.profileImg = document.querySelector('.profile-img');
+            this.profileSection = document.querySelector('.profile-section');
+            this.speechBubbleText = document.querySelector('.speech-bubble p');
+            this.lastMessage = '';
+
+            this.init();
+        }
+
+        init() {
+            this.setupLoadingScreen();
+            this.setupProfileImageError();
+            this.setupEscapeKeySkip();
+        }
+
+        setupLoadingScreen() {
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    this.hideLoader();
+                }, this.LOADING_DURATION);
+            });
+        }
+
+        hideLoader() {
+            if (!this.loader || !this.content) return;
+
+            this.loader.style.opacity = '0';
+
+            setTimeout(() => {
+                this.loader.style.display = 'none';
+                this.content.style.display = 'block';
+                this.content.classList.add('show');
+                this.setupRandomMessages();
+            }, this.FADE_DURATION);
+        }
+
+        setupRandomMessages() {
+            if (!this.profileSection || !this.speechBubbleText) return;
+
+            this.profileSection.addEventListener('mouseenter', () => {
+                const randomMessage = this.getRandomMessage();
+                this.speechBubbleText.textContent = randomMessage;
+            });
+        }
+
+        getRandomMessage() {
+            if (this.MESSAGES.length === 1) {
+                return this.MESSAGES[0];
+            }
+
+            let randomMessage;
+            const availableMessages = this.MESSAGES.filter(msg => msg !== this.lastMessage);
+            randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
+            this.lastMessage = randomMessage;
+            return randomMessage;
+        }
+
+        setupProfileImageError() {
+            if (!this.profileImg) return;
+
+            this.profileImg.addEventListener('error', () => {
+                this.profileImg.style.backgroundColor = '#333';
+                this.profileImg.alt = 'プロフィール画像が見つかりません';
+            });
+        }
+
+        setupEscapeKeySkip() {
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this.loader && this.loader.style.display !== 'none') {
+                    this.skipLoading();
+                }
+            });
+        }
+
+        skipLoading() {
+            this.loader.style.display = 'none';
+            if (this.content) {
+                this.content.style.display = 'block';
+                this.content.classList.add('show');
+            }
+            this.setupRandomMessages();
+        }
+    }
+
+    // UI初期化
+    document.addEventListener('DOMContentLoaded', () => {
+        new UIController();
+    });
+
+})();
