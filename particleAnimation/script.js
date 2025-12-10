@@ -39,7 +39,6 @@
             this.vy = (0.7 * this.radius) / CONFIG.VELOCITY_DIVISOR;
             this.valpha = rand(0.02, 0.09) / CONFIG.ALPHA_DIVISOR;
             this.opacity = 0;
-            this.life = 0;
         }
 
         update() {
@@ -50,26 +49,22 @@
                 this.valpha *= -1;
             }
             this.opacity += this.valpha;
-            this.life += this.valpha;
 
             // opacityを0〜1の範囲に制限
             this.opacity = Math.min(1, Math.max(0, this.opacity));
 
-            if (this.life < 0 || this.radius <= 0 || this.y > this.canvas.height) {
+            if (this.opacity <= 0 || this.radius <= 0 || this.y > this.canvas.height) {
                 this.reset();
             }
         }
 
         draw(context) {
-            const strokeAlpha = Math.min(this.opacity, 0.85);
-            const fillAlpha = Math.min(this.opacity, 0.65);
+            const fillAlpha = Math.min(this.opacity, 0.85);
 
-            context.strokeStyle = `rgba(${this.color}, ${strokeAlpha})`;
             context.fillStyle = `rgba(${this.color}, ${fillAlpha})`;
             context.beginPath();
             context.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
             context.fill();
-            context.stroke();
         }
     }
 
@@ -79,7 +74,17 @@
     class ParticleAnimation {
         constructor() {
             this.canvas = document.getElementById("bg");
+            if (!this.canvas) {
+                console.error('Canvas element with id "bg" not found');
+                return;
+            }
+
             this.context = this.canvas.getContext("2d");
+            if (!this.context) {
+                console.error('Failed to get 2d context from canvas');
+                return;
+            }
+
             this.particles = [];
 
             this.init();
@@ -98,6 +103,7 @@
         resizeCanvas() {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
+            this.createParticles();
         }
 
         createParticles() {
@@ -114,7 +120,7 @@
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(() => {
                     this.resizeCanvas();
-                }, 250);
+                }, 150);
             }, false);
         }
 
@@ -131,8 +137,8 @@
         }
     }
 
-    // パーティクルアニメーション初期化
-    new ParticleAnimation();
+    // パーティクルアニメーション初期化（DOMContentLoaded後に遅延）
+    let particleAnimation = null;
 
     // ===================================
     // UIコントローラークラス
@@ -161,17 +167,13 @@
         }
 
         init() {
-            this.setupLoadingScreen();
             this.setupProfileImageError();
-            this.setupEscapeKeySkip();
         }
 
-        setupLoadingScreen() {
-            window.addEventListener('load', () => {
-                setTimeout(() => {
-                    this.hideLoader();
-                }, this.LOADING_DURATION);
-            });
+        startLoading() {
+            setTimeout(() => {
+                this.hideLoader();
+            }, this.LOADING_DURATION);
         }
 
         hideLoader() {
@@ -197,13 +199,8 @@
         }
 
         getRandomMessage() {
-            if (this.MESSAGES.length === 1) {
-                return this.MESSAGES[0];
-            }
-
-            let randomMessage;
             const availableMessages = this.MESSAGES.filter(msg => msg !== this.lastMessage);
-            randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
+            const randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
             this.lastMessage = randomMessage;
             return randomMessage;
         }
@@ -216,28 +213,13 @@
                 this.profileImg.alt = 'プロフィール画像が見つかりません';
             });
         }
-
-        setupEscapeKeySkip() {
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && this.loader && this.loader.style.display !== 'none') {
-                    this.skipLoading();
-                }
-            });
-        }
-
-        skipLoading() {
-            this.loader.style.display = 'none';
-            if (this.content) {
-                this.content.style.display = 'block';
-                this.content.classList.add('show');
-            }
-            this.setupRandomMessages();
-        }
     }
 
-    // UI初期化
+    // 初期化（DOMContentLoaded後に実行）
     document.addEventListener('DOMContentLoaded', () => {
-        new UIController();
+        particleAnimation = new ParticleAnimation();
+        const uiController = new UIController();
+        uiController.startLoading();
     });
 
 })();
