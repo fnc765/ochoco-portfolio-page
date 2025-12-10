@@ -2,202 +2,268 @@
 
 //ref: https://codepen.io/Fata-ku/details/GRJRaj
 
-// background animation
-(function() {
+// ===================================
+// 定数定義
+// ===================================
+const CONFIG = {
+    PARTICLE_COUNT: 200,
+    RADIUS_MIN: 1,
+    RADIUS_MAX: 8,
+    COLORS: ["64, 32, 0", "250, 64, 0", "64, 0, 0", "200, 200, 200"],
+    VELOCITY_DIVISOR: 3,
+    ALPHA_DIVISOR: 3
+};
 
-    var Base, Particle, canvas, colors, context, draw, drawables, i, mouseX, mouseY, mouseVX, mouseVY, rand, update, click, min, max, colors, particles;
+// ===================================
+// ユーティリティ関数
+// ===================================
+const rand = (a, b) => Math.random() * (b - a) + a;
 
-    min = 1;
-    max = 8;
-    particles = 200;
-    colors = ["64, 32, 0", "250, 64, 0", "64, 0, 0", "200, 200, 200"];
+// ===================================
+// Particleクラス
+// ===================================
+class Particle {
+    constructor(canvas, colors) {
+        this.canvas = canvas;
+        this.colors = colors;
+        this.reset();
+    }
 
-    rand = function(a, b) {
-        return Math.random() * (b - a) + a;
-    };
+    reset() {
+        this.color = this.colors[Math.floor(Math.random() * this.colors.length)];
+        this.radius = rand(CONFIG.RADIUS_MIN, CONFIG.RADIUS_MAX);
+        this.x = rand(0, this.canvas.width);
+        this.y = rand(-20, this.canvas.height * 0.5);
+        this.vx = (-5 + Math.random() * 10) / CONFIG.VELOCITY_DIVISOR;
+        this.vy = (0.7 * this.radius) / CONFIG.VELOCITY_DIVISOR;
+        this.valpha = rand(0.02, 0.09) / CONFIG.ALPHA_DIVISOR;
+        this.opacity = 0;
+        this.life = 0;
+        this.onupdate = undefined;
+        this.type = "dust";
+    }
 
-    Particle = (function() {
-        function Particle() {
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.opacity >= 1 && this.valpha > 0) {
+            this.valpha *= -1;
+        }
+        this.opacity += this.valpha;
+        this.life += this.valpha;
+
+        if (this.type === "dust") {
+            this.opacity = Math.min(1, Math.max(0, this.opacity));
+        } else {
+            this.opacity = 1;
+        }
+
+        if (this.onupdate) {
+            this.onupdate();
+        }
+
+        if (this.life < 0 || this.radius <= 0 || this.y > this.canvas.height) {
+            this.onupdate = undefined;
             this.reset();
         }
+    }
 
-        Particle.prototype.reset = function() {
-            this.color = colors[~~(Math.random()*colors.length)];
-            this.radius = rand(min, max);
-            this.x = rand(0, canvas.width);
-            this.y = rand(-20, canvas.height*0.5);
-            this.vx = -5 + Math.random()*10;
-            this.vy = 0.7 * this.radius;
-            this.valpha = rand(0.02, 0.09);
-            this.opacity = 0;
-            this.life = 0;
-            this.onupdate = undefined;
-            this.type = "dust";
-        };
+    draw(context) {
+        const strokeAlpha = Math.min(this.opacity, 0.85);
+        const fillAlpha = Math.min(this.opacity, 0.65);
 
-        Particle.prototype.update = function() {
-            this.x = (this.x + this.vx/3);
-            this.y = (this.y + this.vy/3);
+        context.strokeStyle = `rgba(${this.color}, ${strokeAlpha})`;
+        context.fillStyle = `rgba(${this.color}, ${fillAlpha})`;
+        context.beginPath();
+        context.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
+        context.fill();
+        context.stroke();
+    }
+}
 
-            if(this.opacity >=1 && this.valpha > 0) this.valpha *=-1;
-            this.opacity += this.valpha/3;
-            this.life += this.valpha/3;
+// ===================================
+// ParticleAnimationクラス
+// ===================================
+class ParticleAnimation {
+    constructor() {
+        this.canvas = document.getElementById("bg");
+        this.context = this.canvas.getContext("2d");
+        this.particles = [];
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.mouseVX = 0;
+        this.mouseVY = 0;
 
-            if(this.type === "dust")
-                this.opacity = Math.min(1, Math.max(0, this.opacity));
-            else
-                this.opacity = 1;
+        this.init();
+        this.setupEventListeners();
+        this.animate();
+    }
 
-            if(this.onupdate) this.onupdate();
-            if(this.life < 0 || this.radius <= 0 || this.y > canvas.height){
-                this.onupdate = undefined;
-                this.reset();
-            }
-        };
+    init() {
+        this.resizeCanvas();
+        this.createParticles();
+    }
 
-        Particle.prototype.draw = function(c) {
-            c.strokeStyle = "rgba(" + this.color + ", " + Math.min(this.opacity, 0.85) + ")";
-            c.fillStyle = "rgba(" + this.color + ", " + Math.min(this.opacity, 0.65) + ")";
-            c.beginPath();
-            c.arc(this.x, this.y, this.radius, 2 * Math.PI, false);
-            c.fill();
-            c.stroke();
-        };
+    resizeCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+    }
 
-        return Particle;
-
-    })();
-
-    mouseVX = mouseVY = mouseX = mouseY = 0;
-
-    canvas = document.getElementById("bg");
-    context = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    drawables = (function() {
-        var _i, _results;
-        _results = [];
-        for (i = _i = 1; _i <= particles; i = ++_i) {
-            _results.push(new Particle);
+    createParticles() {
+        this.particles = [];
+        for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
+            this.particles.push(new Particle(this.canvas, CONFIG.COLORS));
         }
-        return _results;
-    })();
+    }
 
-    draw = function() {
-        var d, _i, _len;
-        context.clearRect(0, 0, canvas.width, canvas.height);
+    setupEventListeners() {
+        // リサイズイベント（デバウンス付き）
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                this.resizeCanvas();
+            }, 250);
+        }, false);
 
-        for (_i = 0, _len = drawables.length; _i < _len; _i++) {
-            d = drawables[_i];
-            d.draw(context);
-        }
-    };
-
-    update = function() {
-        var d, _i, _len, _results;
-        _results = [];
-        for (_i = 0, _len = drawables.length; _i < _len; _i++) {
-            d = drawables[_i];
-            _results.push(d.update());
-        }
-        return _results;
-    };
-
-    // requestAnimationFrameを使用した最適化されたアニメーションループ
-    var animate = function() {
-        update();
-        draw();
-        requestAnimationFrame(animate);
-    };
-
-    document.onmousemove = function(e) {
-        mouseVX = mouseX;
-        mouseVY = mouseY;
-        mouseX = ~~e.pageX;
-        mouseY = ~~e.pageY;
-        mouseVX = ~~((mouseVX - mouseX)/2);
-        mouseVY = ~~((mouseVY - mouseY)/2);
-
-    };
-
-    // リサイズ時のみcanvasサイズを更新
-    window.addEventListener('resize', function() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }, false);
-
-    // アニメーション開始
-    animate();
-}).call(this);
-
-// ページ読み込み完了時の処理
-window.addEventListener('load', () => {
-    const loader = document.getElementById('loader');
-    const content = document.getElementById('content');
-
-    // 1秒間ローディング画面を表示
-    setTimeout(() => {
-        // ローダーをフェードアウト
-        loader.style.opacity = '0';
-
-        // フェードアウト完了後にローダーを非表示にしてコンテンツを表示
-        setTimeout(() => {
-            loader.style.display = 'none';
-            content.style.display = 'block';
-            content.classList.add('show');
-
-            // コンテンツ表示後にランダムメッセージ機能を設定
-            const profileSection = document.querySelector('.profile-section');
-            const speechBubbleText = document.querySelector('.speech-bubble p');
-            const messages = [
-                'チョコレートのちょこだよ！',
-                'うどんせいばーすき！',
-                'よろしくね！',
-                '赤メガネがトレードマーク！',
-                '仲良くしてね！',
-                'VRChatで遊ぼう！'
-            ];
-
-            if (profileSection && speechBubbleText) {
-                let lastMessage = '';
-                profileSection.addEventListener('mouseenter', () => {
-                    let randomMessage;
-                    do {
-                        randomMessage = messages[Math.floor(Math.random() * messages.length)];
-                    } while (randomMessage === lastMessage && messages.length > 1);
-                    lastMessage = randomMessage;
-                    speechBubbleText.textContent = randomMessage;
-                });
-            }
-        }, 500);
-    }, 1000);
-});
-
-// 画像読み込みエラー時の処理
-document.addEventListener('DOMContentLoaded', () => {
-    const profileImg = document.querySelector('.profile-img');
-
-    if (profileImg) {
-        profileImg.addEventListener('error', () => {
-            // 画像が見つからない場合、代替の背景色を表示
-            profileImg.style.backgroundColor = '#333';
-            profileImg.alt = 'プロフィール画像が見つかりません';
+        // マウス移動イベント
+        document.addEventListener('mousemove', (e) => {
+            this.mouseVX = this.mouseX;
+            this.mouseVY = this.mouseY;
+            this.mouseX = Math.floor(e.pageX);
+            this.mouseY = Math.floor(e.pageY);
+            this.mouseVX = Math.floor((this.mouseVX - this.mouseX) / 2);
+            this.mouseVY = Math.floor((this.mouseVY - this.mouseY) / 2);
         });
     }
-});
 
-// Escキーでローディング画面をスキップ
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const loader = document.getElementById('loader');
-        if (loader && loader.style.display !== 'none') {
-            loader.style.display = 'none';
-            const content = document.getElementById('content');
-            if (content) {
-                content.style.display = 'block';
-                content.classList.add('show');
-            }
+    update() {
+        for (const particle of this.particles) {
+            particle.update();
         }
     }
+
+    draw() {
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        for (const particle of this.particles) {
+            particle.draw(this.context);
+        }
+    }
+
+    animate() {
+        this.update();
+        this.draw();
+        requestAnimationFrame(() => this.animate());
+    }
+}
+
+// パーティクルアニメーション初期化
+new ParticleAnimation();
+
+// ===================================
+// UIコントローラークラス
+// ===================================
+class UIController {
+    constructor() {
+        this.LOADING_DURATION = 1000;
+        this.FADE_DURATION = 500;
+        this.MESSAGES = [
+            'チョコレートのちょこだよ！',
+            'うどんせいばーすき！',
+            'よろしくね！',
+            '赤メガネがトレードマーク！',
+            '仲良くしてね！',
+            'VRChatで遊ぼう！'
+        ];
+
+        this.loader = document.getElementById('loader');
+        this.content = document.getElementById('content');
+        this.profileImg = document.querySelector('.profile-img');
+        this.profileSection = document.querySelector('.profile-section');
+        this.speechBubbleText = document.querySelector('.speech-bubble p');
+        this.lastMessage = '';
+
+        this.init();
+    }
+
+    init() {
+        this.setupLoadingScreen();
+        this.setupProfileImageError();
+        this.setupEscapeKeySkip();
+    }
+
+    setupLoadingScreen() {
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                this.hideLoader();
+            }, this.LOADING_DURATION);
+        });
+    }
+
+    hideLoader() {
+        if (!this.loader || !this.content) return;
+
+        this.loader.style.opacity = '0';
+
+        setTimeout(() => {
+            this.loader.style.display = 'none';
+            this.content.style.display = 'block';
+            this.content.classList.add('show');
+            this.setupRandomMessages();
+        }, this.FADE_DURATION);
+    }
+
+    setupRandomMessages() {
+        if (!this.profileSection || !this.speechBubbleText) return;
+
+        this.profileSection.addEventListener('mouseenter', () => {
+            const randomMessage = this.getRandomMessage();
+            this.speechBubbleText.textContent = randomMessage;
+        });
+    }
+
+    getRandomMessage() {
+        if (this.MESSAGES.length === 1) {
+            return this.MESSAGES[0];
+        }
+
+        let randomMessage;
+        const availableMessages = this.MESSAGES.filter(msg => msg !== this.lastMessage);
+        randomMessage = availableMessages[Math.floor(Math.random() * availableMessages.length)];
+        this.lastMessage = randomMessage;
+        return randomMessage;
+    }
+
+    setupProfileImageError() {
+        if (!this.profileImg) return;
+
+        this.profileImg.addEventListener('error', () => {
+            this.profileImg.style.backgroundColor = '#333';
+            this.profileImg.alt = 'プロフィール画像が見つかりません';
+        });
+    }
+
+    setupEscapeKeySkip() {
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.loader && this.loader.style.display !== 'none') {
+                this.skipLoading();
+            }
+        });
+    }
+
+    skipLoading() {
+        this.loader.style.display = 'none';
+        if (this.content) {
+            this.content.style.display = 'block';
+            this.content.classList.add('show');
+        }
+        this.setupRandomMessages();
+    }
+}
+
+// UI初期化
+document.addEventListener('DOMContentLoaded', () => {
+    new UIController();
 });
