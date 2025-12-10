@@ -152,10 +152,10 @@ window.addEventListener('load', () => {
             const speechBubbleText = document.querySelector('.speech-bubble p');
             const messages = [
                 'チョコレートのちょこだよ！',
-                'こんにちは！',
+                'うどんせいばーすき！',
                 'よろしくね！',
-                'チョコが好き！',
-                '今日もいい日だね！',
+                '赤メガネがトレードマーク！',
+                '仲良くしてね！',
                 'VRChatで遊ぼう！'
             ];
 
