@@ -141,7 +141,7 @@
                     ${getTypeBadge(t.type)}
                     ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
                     <blockquote class="twitter-tweet" data-dnt="true" data-theme="dark">
-                        <a href="https://twitter.com/i/web/status/${t.tweet_id}"></a>
+                        <a href="https://x.com/i/status/${t.tweet_id}"></a>
                     </blockquote>
                 </div>
             `;
@@ -620,6 +620,16 @@
                 loader.style.display = "none";
                 content.style.display = "block";
                 content.classList.add("show");
+                // コンテンツ表示後に Twitter 埋め込みを再処理
+                if (window.twttr && window.twttr.widgets) {
+                    window.twttr.widgets.load();
+                } else {
+                    window.addEventListener("load", () => {
+                        if (window.twttr && window.twttr.widgets) {
+                            window.twttr.widgets.load();
+                        }
+                    });
+                }
             }, 500);
         }, 800);
     }
