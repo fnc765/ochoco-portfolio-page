@@ -1,0 +1,12 @@
+{
+  "name": "ohatsui-collector",
+  "version": "1.0.0",
+  "description": "おはつい収集スクリプト (X API → Cloudflare D1)",
+  "type": "module",
+  "scripts": {
+    "collect": "node collect.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

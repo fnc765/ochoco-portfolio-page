@@ -51,6 +51,48 @@ jobs:
             echo "Project created."
           fi
 
+      - name: Setup D1 database and bindings
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+
+          # D1 データベースが存在しなければ作成
+          DB_LIST=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database?per_page=100")
+          DB_ID=$(echo "$DB_LIST" | jq -r '.result[] | select(.name == "ohatui-tweets") | .uuid')
+
+          if [ -z "$DB_ID" ]; then
+            echo "D1 database 'ohatui-tweets' を作成..."
+            CREATE_RESP=$(curl -sf -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"ohatui-tweets"}' \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database")
+            DB_ID=$(echo "$CREATE_RESP" | jq -r '.result.uuid')
+            echo "作成完了: $DB_ID"
+          else
+            echo "D1 database 'ohatui-tweets' は既に存在: $DB_ID"
+          fi
+
+          # スキーマ適用
+          SQL=$(cat ohatsui/schema.sql | tr '\n' ' ' | sed "s/'/''/g")
+          curl -sf -X POST \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"sql\":\"CREATE TABLE IF NOT EXISTS tweets (id TEXT PRIMARY KEY, tweet_id TEXT UNIQUE NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL, image_url TEXT, like_count INTEGER NOT NULL DEFAULT 0, retweet_count INTEGER NOT NULL DEFAULT 0, type TEXT NOT NULL DEFAULT 'ohachoco' CHECK(type IN ('ohachoco','konchoco','konbanchoco'))); CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at); CREATE INDEX IF NOT EXISTS idx_type ON tweets(type);\"}" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database/$DB_ID/query" \
+            && echo "スキーマ適用完了" || echo "スキーマ適用済みまたはスキップ"
+
+          # Pages プロジェクトに D1 バインディングを設定
+          curl -sf -X PATCH \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}}}}" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/ohatui-db" \
+            && echo "D1 バインディング設定完了"
+
+          echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
+
       - name: Deploy ohatsui/ to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

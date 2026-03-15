@@ -52,28 +52,50 @@
     }
 
     // ===================================
-    // データ処理
+    // データ取得・処理
     // ===================================
-    // ツイートを日付順にソート（新しい順）
-    const tweets = [...MOCK_TWEETS].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    // データ変数（initData() で初期化）
+    let tweets = [];
+    let tweetsByDate = {};
+    let milestones = {};
+    let sortedAsc = [];
 
-    // 日付ごとのマップ
-    const tweetsByDate = {};
-    tweets.forEach(t => {
-        const key = getDateKey(t.created_at);
-        if (!tweetsByDate[key]) tweetsByDate[key] = [];
-        tweetsByDate[key].push(t);
-    });
-
-    // マイルストーン計算（投稿順にインデックス付与）
-    const sortedAsc = [...tweets].reverse();
-    const milestones = {};
-    sortedAsc.forEach((t, i) => {
-        const num = i + 1;
-        if (num === 1 || num === 50 || num === 100 || num === 200 || num === 365 || num === 500 || num === 700 || num % 100 === 0) {
-            milestones[t.id] = num;
+    /**
+     * /api/tweets から取得、失敗時は MOCK_TWEETS にフォールバック
+     */
+    async function loadTweets() {
+        try {
+            const res = await fetch('/api/tweets');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!Array.isArray(data)) throw new Error('Invalid response');
+            console.log(`[ohatsui] APIから ${data.length} 件取得`);
+            return data;
+        } catch (e) {
+            console.warn('[ohatsui] API未接続、モックデータを使用:', e.message);
+            return typeof MOCK_TWEETS !== 'undefined' ? MOCK_TWEETS : [];
         }
-    });
+    }
+
+    function initData(rawTweets) {
+        tweets = [...rawTweets].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        tweetsByDate = {};
+        tweets.forEach(t => {
+            const key = getDateKey(t.created_at);
+            if (!tweetsByDate[key]) tweetsByDate[key] = [];
+            tweetsByDate[key].push(t);
+        });
+
+        sortedAsc = [...tweets].reverse();
+        milestones = {};
+        sortedAsc.forEach((t, i) => {
+            const num = i + 1;
+            if (num === 1 || num === 50 || num === 100 || num === 200 || num === 365 || num === 500 || num === 700 || num % 100 === 0) {
+                milestones[t.id] = num;
+            }
+        });
+    }
 
     // ===================================
     // 背景タイルアニメーション
@@ -504,7 +526,7 @@
     // ===================================
     const ITEMS_PER_PAGE = 12;
     let currentPage = 1;
-    let filteredTweets = [...tweets];
+    let filteredTweets = [];
 
     function filterTweets() {
         const text = document.getElementById("search-text")?.value.toLowerCase() || "";
@@ -628,11 +650,14 @@
     // ===================================
     // 初期化
     // ===================================
-    document.addEventListener("DOMContentLoaded", () => {
-        // 背景タイル
-        initTileBackground();
+    document.addEventListener("DOMContentLoaded", async () => {
+        // データ取得（API → フォールバック）
+        const rawTweets = await loadTweets();
+        initData(rawTweets);
+        filteredTweets = [...tweets];
 
-        // ローディング
+        // 背景タイル・ローディング
+        initTileBackground();
         hideLoader();
 
         // メインコンテンツ
