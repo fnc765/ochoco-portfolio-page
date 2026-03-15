@@ -40,7 +40,7 @@ const MOCK_TWEETS = (() => {
 
     const tweets = [];
     const startDate = new Date("2024-04-01");
-    const endDate = new Date("2026-03-14");
+    const endDate = new Date("2026-03-14"); // モックデータの末尾日付（実ツイートは下で追加）
     let tweetId = 1000000000;
 
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -93,6 +93,18 @@ const MOCK_TWEETS = (() => {
             type: selectedType.type
         });
     }
+
+    // 実ツイートを追加（tweet_id があるものは「元のポストを見る」リンクを表示）
+    tweets.push({
+        id: "2032988351293526350",
+        tweet_id: "2032988351293526350",
+        text: "おはちょこ〜！",
+        created_at: "2026-03-15T08:00:00.000Z",
+        image_url: null,
+        like_count: 0,
+        retweet_count: 0,
+        type: "ohachoco"
+    });
 
     return tweets;
 })();
