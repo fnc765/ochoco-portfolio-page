@@ -1,0 +1,61 @@
+name: Deploy ohatui-db to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - 'claude/ohatui-db-gIUW7'
+  workflow_dispatch:
+
+env:
+  CF_API_TOKEN: WctE7mePBsrd8bP8zKKRk9bI4d_i7kHfFKiM7-Un
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get Cloudflare Account ID
+        id: cf-account
+        run: |
+          ACCOUNT_ID=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts" \
+            | jq -r '.result[0].id')
+          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Check / create Cloudflare Pages project
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          PROJECT_NAME="ohatui-db"
+          STATUS=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
+            | jq -r '.success')
+          if [ "$STATUS" != "true" ]; then
+            curl -sf -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$PROJECT_NAME\",\"production_branch\":\"main\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects"
+          fi
+
+      - name: Deploy ohatsui/ to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CF_API_TOKEN }}
+          accountId: ${{ steps.cf-account.outputs.account_id }}
+          command: pages deploy ohatsui --project-name=ohatui-db --commit-dirty=true
+
+      - name: Show deployed URL
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          SUBDOMAIN=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/ohatui-db" \
+            | jq -r '.result.subdomain')
+          echo "Preview URL: https://$SUBDOMAIN"
