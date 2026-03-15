@@ -1,0 +1,79 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get Cloudflare Account ID
+        id: cf-account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          ACCOUNT_ID=$(curl -sf \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts" \
+            | jq -r '.result[0].id')
+          if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "null" ]; then
+            echo "Failed to retrieve Cloudflare Account ID"
+            exit 1
+          fi
+          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+          echo "Account ID retrieved successfully"
+
+      - name: Check / create Cloudflare Pages project
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT_ID: ${{ steps.cf-account.outputs.account_id }}
+        run: |
+          PROJECT_NAME="ochoco-portfolio"
+
+          STATUS=$(curl -sf \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
+            | jq -r '.success')
+
+          if [ "$STATUS" = "true" ]; then
+            echo "Pages project '$PROJECT_NAME' already exists."
+          else
+            echo "Creating Pages project '$PROJECT_NAME' ..."
+            curl -sf -X POST \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$PROJECT_NAME\",\"production_branch\":\"main\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects"
+            echo "Project created."
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ steps.cf-account.outputs.account_id }}
+          command: pages deploy basePortfolio --project-name=ochoco-portfolio --commit-dirty=true
+
+      - name: Show deployed URL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT_ID: ${{ steps.cf-account.outputs.account_id }}
+        run: |
+          PROJECT_NAME="ochoco-portfolio"
+          SUBDOMAIN=$(curl -sf \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
+            | jq -r '.result.subdomain')
+          echo ""
+          echo "=========================================="
+          echo "  Deployed URL: https://$SUBDOMAIN"
+          echo "=========================================="
