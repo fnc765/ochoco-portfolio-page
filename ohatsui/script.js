@@ -133,23 +133,42 @@
         }
 
         const t = todayTweets[0];
-        container.innerHTML = `
-            <div class="today-card-inner">
-                <img src="${t.image_url}" alt="今日のおはつい" class="today-image" data-tweet-id="${t.id}">
-                <div class="today-info">
-                    ${getTypeBadge(t.type)}
-                    <p class="today-text">${escapeHtml(t.text)}</p>
-                    <div class="today-meta">
-                        <span><i class="fas fa-clock" aria-hidden="true"></i> ${formatDateTime(t.created_at)}</span>
-                        <span><i class="fas fa-heart" aria-hidden="true"></i> ${t.like_count}</span>
-                        <span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>
-                    </div>
-                    ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
-                </div>
-            </div>
-        `;
 
-        container.querySelector(".today-image")?.addEventListener("click", () => openModal(t));
+        if (t.image_url) {
+            container.innerHTML = `
+                <div class="today-card-inner">
+                    <img src="${t.image_url}" alt="今日のおはつい" class="today-image" data-tweet-id="${t.id}">
+                    <div class="today-info">
+                        ${getTypeBadge(t.type)}
+                        <p class="today-text">${escapeHtml(t.text)}</p>
+                        <div class="today-meta">
+                            <span><i class="fas fa-clock" aria-hidden="true"></i> ${formatDateTime(t.created_at)}</span>
+                            <span><i class="fas fa-heart" aria-hidden="true"></i> ${t.like_count}</span>
+                            <span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>
+                        </div>
+                        ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
+                        ${t.tweet_id ? `<a href="https://x.com/i/web/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
+                    </div>
+                </div>
+            `;
+            container.querySelector(".today-image")?.addEventListener("click", () => openModal(t));
+        } else {
+            container.innerHTML = `
+                <div class="today-text-card">
+                    <div class="today-text-card-inner">
+                        ${getTypeBadge(t.type)}
+                        <p class="today-text-large">${escapeHtml(t.text)}</p>
+                        <div class="today-meta">
+                            <span><i class="fas fa-clock" aria-hidden="true"></i> ${formatDateTime(t.created_at)}</span>
+                            ${t.like_count ? `<span><i class="fas fa-heart" aria-hidden="true"></i> ${t.like_count}</span>` : ""}
+                            ${t.retweet_count ? `<span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>` : ""}
+                        </div>
+                        ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
+                        ${t.tweet_id ? `<a href="https://x.com/i/web/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
+                    </div>
+                </div>
+            `;
+        }
     }
 
     // ===================================
