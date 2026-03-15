@@ -94,5 +94,17 @@ const MOCK_TWEETS = (() => {
         });
     }
 
+    // 実ツイートを末尾に追加（tweet_id があるものは Twitter 埋め込みで表示）
+    tweets.push({
+        id: "2032988351293526350",
+        tweet_id: "2032988351293526350",
+        text: "おはちょこ〜！",
+        created_at: "2026-03-15T08:00:00.000Z",
+        image_url: null,
+        like_count: 0,
+        retweet_count: 0,
+        type: "ohachoco"
+    });
+
     return tweets;
 })();

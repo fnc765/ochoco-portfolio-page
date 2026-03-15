@@ -133,6 +133,24 @@
         }
 
         const t = todayTweets[0];
+
+        // tweet_id がある場合は Twitter 公式埋め込みで表示
+        if (t.tweet_id) {
+            container.innerHTML = `
+                <div class="today-embed-wrapper">
+                    ${getTypeBadge(t.type)}
+                    ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
+                    <blockquote class="twitter-tweet" data-dnt="true" data-theme="dark">
+                        <a href="https://twitter.com/i/web/status/${t.tweet_id}"></a>
+                    </blockquote>
+                </div>
+            `;
+            if (window.twttr && window.twttr.widgets) {
+                window.twttr.widgets.load(container);
+            }
+            return;
+        }
+
         container.innerHTML = `
             <div class="today-card-inner">
                 <img src="${t.image_url}" alt="今日のおはつい" class="today-image" data-tweet-id="${t.id}">
