@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>おはついアーカイブ — 手動登録</title>
+  <style>
+    body { font-family: sans-serif; max-width: 540px; margin: 40px auto; padding: 0 16px; background: #fafafa; color: #222; }
+    h1 { font-size: 1.2rem; margin-bottom: 24px; }
+    label { display: block; font-size: .85rem; color: #555; margin-bottom: 4px; }
+    input, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: .95rem; margin-bottom: 14px; }
+    textarea { height: 80px; resize: vertical; }
+    button { background: #1da1f2; color: #fff; border: none; border-radius: 6px; padding: 10px 24px; font-size: 1rem; cursor: pointer; }
+    button:hover { background: #0d8bd9; }
+    #result { margin-top: 20px; padding: 12px; border-radius: 6px; font-size: .9rem; white-space: pre-wrap; display: none; }
+    .ok  { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .err { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  </style>
+</head>
+<body>
+  <h1>おはついアーカイブ — 手動登録</h1>
+
+  <label>COLLECT_SECRET トークン</label>
+  <input type="password" id="token" placeholder="Cloudflare 環境変数の COLLECT_SECRET">
+
+  <label>ツイート URL <span style="color:#888">（例: https://x.com/ochoco0215/status/123456789）</span></label>
+  <input type="url" id="tweet_url" placeholder="https://x.com/ochoco0215/status/...">
+
+  <label>ツイート本文</label>
+  <textarea id="text" placeholder="おはちょこ～🍫！今日も..."></textarea>
+
+  <label>投稿日時 <span style="color:#888">（省略すると現在時刻）</span></label>
+  <input type="datetime-local" id="created_at">
+
+  <button onclick="submit()">登録する</button>
+
+  <div id="result"></div>
+
+  <script>
+    async function submit() {
+      const token    = document.getElementById('token').value.trim();
+      const tweetUrl = document.getElementById('tweet_url').value.trim();
+      const text     = document.getElementById('text').value.trim();
+      const dtVal    = document.getElementById('created_at').value;
+
+      if (!tweetUrl || !text) {
+        showResult('ツイート URL と本文は必須です', false);
+        return;
+      }
+
+      const body = { text, tweet_url: tweetUrl };
+      if (dtVal) body.created_at = new Date(dtVal).toISOString();
+
+      const params = token ? `?token=${encodeURIComponent(token)}` : '';
+      try {
+        const res  = await fetch(`/api/collect${params}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        showResult(
+          `HTTP ${res.status}\n${JSON.stringify(data, null, 2)}`,
+          res.ok && !data.error
+        );
+      } catch (e) {
+        showResult(`通信エラー: ${e.message}`, false);
+      }
+    }
+
+    function showResult(msg, ok) {
+      const el = document.getElementById('result');
+      el.textContent = msg;
+      el.className = ok ? 'ok' : 'err';
+      el.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
