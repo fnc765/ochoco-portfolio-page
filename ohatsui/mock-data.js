@@ -98,10 +98,10 @@ const MOCK_TWEETS = (() => {
     tweets.push({
         id: "2032988351293526350",
         tweet_id: "2032988351293526350",
-        text: "おはちょこ〜！",
-        created_at: "2026-03-15T08:00:00.000Z",
-        image_url: null,
-        like_count: 0,
+        text: "おはちょこ～🍫！\n今日も北九州散策＆ライブ行ってくるよ～🥳🥳",
+        created_at: "2026-03-15T01:12:00.000Z",
+        image_url: null, // TODO: 画像URL（pbs.twimg.com/...）を設定する
+        like_count: 20,
         retweet_count: 0,
         type: "ohachoco"
     });
