@@ -84,12 +84,22 @@ jobs:
             && echo "スキーマ適用完了" || echo "スキーマ適用済みまたはスキップ"
 
           # Pages プロジェクトに D1 バインディングを設定
+          PATCH_BODY="{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}}}}"
+
+          # COLLECT_SECRET が設定されていれば環境変数にも追加
+          if [ -n "${{ secrets.COLLECT_SECRET }}" ]; then
+            PATCH_BODY="{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"env_vars\":{\"COLLECT_SECRET\":{\"value\":\"${{ secrets.COLLECT_SECRET }}\",\"type\":\"secret_text\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"env_vars\":{\"COLLECT_SECRET\":{\"value\":\"${{ secrets.COLLECT_SECRET }}\",\"type\":\"secret_text\"}}}}}"
+            echo "COLLECT_SECRET を Pages 環境変数に設定します"
+          else
+            echo "COLLECT_SECRET が未設定です (GitHub Secret 'COLLECT_SECRET' を追加してください)"
+          fi
+
           curl -sf -X PATCH \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}}}}" \
+            -d "$PATCH_BODY" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/ohatui-db" \
-            && echo "D1 バインディング設定完了"
+            && echo "D1 バインディング・環境変数設定完了"
 
           echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
 
@@ -100,7 +110,7 @@ jobs:
           accountId: ${{ steps.cf-account.outputs.account_id }}
           command: pages deploy ohatsui --project-name=ohatui-db --commit-dirty=true
 
-      - name: Show deployed URL
+      - name: Show deployed URL and IFTTT setup
         run: |
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ohatui-db"
@@ -110,5 +120,21 @@ jobs:
             | jq -r '.result.subdomain')
           echo ""
           echo "=========================================="
-          echo "  Preview URL: https://$SUBDOMAIN"
+          echo "  デプロイ完了: https://$SUBDOMAIN"
           echo "=========================================="
+          echo ""
+          echo "─── IFTTT 設定 (毎日のおはつい自動収集) ───"
+          echo "1. https://ifttt.com でアプレット作成 (無料)"
+          echo "   If:   X (Twitter) > 'New tweet by you'"
+          echo "   Then: Webhooks > 'Make a web request'"
+          echo "         URL:    https://$SUBDOMAIN/api/collect?token=<COLLECT_SECRET の値>"
+          echo "         Method: POST"
+          echo "         Type:   application/json"
+          echo '         Body:   {"text":"{{Text}}","tweet_url":"{{LinkToTweet}}","created_at":"{{CreatedAt}}"}'
+          echo ""
+          echo "2. GitHub Secret 'COLLECT_SECRET' に任意のトークン文字列を設定"
+          echo "   (設定後、このワークフローを再実行して Cloudflare Pages に反映)"
+          echo ""
+          echo "─── X アーカイブからの一括インポート ───"
+          echo "  node ohatsui/collector/import-archive.js /path/to/data/tweets.js"
+          echo "  (CF_API_TOKEN / CF_ACCOUNT_ID / CF_D1_DATABASE_ID を環境変数に設定して実行)"
