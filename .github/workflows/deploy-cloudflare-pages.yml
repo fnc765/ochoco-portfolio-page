@@ -4,7 +4,11 @@ on:
   push:
     branches:
       - main
+      - 'claude/deploy-cloudflare-pages-gIUW7'
   workflow_dispatch:
+
+env:
+  CF_API_TOKEN: WctE7mePBsrd8bP8zKKRk9bI4d_i7kHfFKiM7-Un
 
 jobs:
   deploy:
@@ -18,11 +22,9 @@ jobs:
 
       - name: Get Cloudflare Account ID
         id: cf-account
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           ACCOUNT_ID=$(curl -sf \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts" \
             | jq -r '.result[0].id')
           if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "null" ]; then
@@ -30,17 +32,15 @@ jobs:
             exit 1
           fi
           echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
-          echo "Account ID retrieved successfully"
+          echo "Account ID: $ACCOUNT_ID"
 
       - name: Check / create Cloudflare Pages project
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT_ID: ${{ steps.cf-account.outputs.account_id }}
         run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ochoco-portfolio"
 
           STATUS=$(curl -sf \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
             | jq -r '.success')
 
@@ -49,7 +49,7 @@ jobs:
           else
             echo "Creating Pages project '$PROJECT_NAME' ..."
             curl -sf -X POST \
-              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
               -H "Content-Type: application/json" \
               -d "{\"name\":\"$PROJECT_NAME\",\"production_branch\":\"main\"}" \
               "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects"
@@ -59,18 +59,16 @@ jobs:
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ env.CF_API_TOKEN }}
           accountId: ${{ steps.cf-account.outputs.account_id }}
           command: pages deploy basePortfolio --project-name=ochoco-portfolio --commit-dirty=true
 
       - name: Show deployed URL
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT_ID: ${{ steps.cf-account.outputs.account_id }}
         run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ochoco-portfolio"
           SUBDOMAIN=$(curl -sf \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
             | jq -r '.result.subdomain')
           echo ""
