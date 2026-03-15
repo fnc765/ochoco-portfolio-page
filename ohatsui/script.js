@@ -52,6 +52,31 @@
     }
 
     // ===================================
+    // Twitter 埋め込み
+    // ===================================
+    let pendingTweetId = null;
+
+    function createTweetEmbed(tweetId) {
+        const el = document.getElementById("today-tweet-embed");
+        if (!el) return;
+        if (window.twttr && window.twttr.widgets) {
+            window.twttr.widgets.createTweet(tweetId, el, { theme: "dark", dnt: true });
+        } else {
+            // widgets.js がまだ読み込まれていない場合はポーリング（最大10秒）
+            let tries = 0;
+            const poll = setInterval(() => {
+                tries++;
+                if (window.twttr && window.twttr.widgets) {
+                    clearInterval(poll);
+                    window.twttr.widgets.createTweet(tweetId, el, { theme: "dark", dnt: true });
+                } else if (tries >= 100) {
+                    clearInterval(poll);
+                }
+            }, 100);
+        }
+    }
+
+    // ===================================
     // データ処理
     // ===================================
     // ツイートを日付順にソート（新しい順）
@@ -140,14 +165,12 @@
                 <div class="today-embed-wrapper">
                     ${getTypeBadge(t.type)}
                     ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
-                    <blockquote class="twitter-tweet" data-dnt="true" data-theme="dark">
-                        <a href="https://x.com/i/status/${t.tweet_id}"></a>
-                    </blockquote>
+                    <div id="today-tweet-embed"></div>
                 </div>
             `;
-            if (window.twttr && window.twttr.widgets) {
-                window.twttr.widgets.load(container);
-            }
+            // widgets.js が読み込まれるまでポーリングして createTweet() で生成
+            // (blockquote + load() は display:none 時に処理済みフラグが立ち再描画されないため使わない)
+            pendingTweetId = t.tweet_id;
             return;
         }
 
@@ -620,15 +643,9 @@
                 loader.style.display = "none";
                 content.style.display = "block";
                 content.classList.add("show");
-                // コンテンツ表示後に Twitter 埋め込みを再処理
-                if (window.twttr && window.twttr.widgets) {
-                    window.twttr.widgets.load();
-                } else {
-                    window.addEventListener("load", () => {
-                        if (window.twttr && window.twttr.widgets) {
-                            window.twttr.widgets.load();
-                        }
-                    });
+                // コンテンツ表示後に埋め込みを生成
+                if (pendingTweetId) {
+                    createTweetEmbed(pendingTweetId);
                 }
             }, 500);
         }, 800);
