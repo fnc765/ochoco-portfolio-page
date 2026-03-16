@@ -1,12 +1,12 @@
 # ohatsui/ Cloudflare Pages プロジェクト設定
-# ローカル開発: wrangler pages dev . --d1=DB
-# 本番の D1 バインディングは Cloudflare ダッシュボードまたはデプロイワークフローで設定
+#
+# ローカル開発:
+#   wrangler pages dev . --d1=DB
+#   (D1 バインディングはローカル SQLite で自動作成されます)
+#
+# 本番の D1 バインディングはデプロイワークフロー (.github/workflows/deploy-ohatui-preview.yml) で
+# Cloudflare Pages API 経由で自動設定されます。wrangler.toml への記載は不要です。
 
 name = "ohatui-db"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "."
-
-[[d1_databases]]
-binding = "DB"
-database_name = "ohatui-tweets"
-database_id = "PLACEHOLDER"   # デプロイ後、実際の database_id に置き換える

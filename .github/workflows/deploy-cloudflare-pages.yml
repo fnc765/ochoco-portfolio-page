@@ -61,6 +61,7 @@ jobs:
         with:
           apiToken: ${{ env.CF_API_TOKEN }}
           accountId: ${{ steps.cf-account.outputs.account_id }}
+          wranglerVersion: "3.99.0"
           command: pages deploy basePortfolio --project-name=ochoco-portfolio --commit-dirty=true
 
       - name: Show deployed URL
