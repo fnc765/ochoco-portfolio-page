@@ -19,8 +19,8 @@
  *    (デプロイワークフローが自動設定、または Pages ダッシュボードで手動設定)
  * ─────────────────────────────────────────
  *
- * text を省略した場合、TWITTER_BEARER_TOKEN が設定されていれば
- * Twitter API v2 から本文・画像・投稿日を自動取得します。
+ * text を省略した場合、FixTweet API (api.fxtwitter.com) を使って
+ * 本文・画像・投稿日を自動取得します（APIキー不要・無料）。
  *
  * リクエスト例 (手動 / tweet_url のみ):
  *   POST /api/collect?token=xxxxxxxx
@@ -37,32 +37,31 @@
 
 const GREETING_PATTERN = /おはちょこ|こんちょこ|こんばんちょこ|おはよ|おは[～〜！!🍫]/u;
 
-/** Twitter API v2 からツイートデータを取得するヘルパー */
-async function fetchTweetFromApi(tweetId, bearerToken) {
-    const apiUrl =
-        `https://api.twitter.com/2/tweets/${tweetId}` +
-        `?tweet.fields=created_at,text,public_metrics,attachments` +
-        `&expansions=attachments.media_keys` +
-        `&media.fields=url,preview_image_url,type`;
+/** FixTweet API (api.fxtwitter.com) からツイートデータを取得するヘルパー（APIキー不要） */
+async function fetchTweetFromFxTwitter(tweetUrl) {
+    const apiUrl = tweetUrl
+        .replace('https://x.com/', 'https://api.fxtwitter.com/')
+        .replace('https://twitter.com/', 'https://api.fxtwitter.com/')
+        .replace('http://x.com/', 'https://api.fxtwitter.com/')
+        .replace('http://twitter.com/', 'https://api.fxtwitter.com/');
     try {
-        const res = await fetch(apiUrl, {
-            headers: { Authorization: `Bearer ${bearerToken}` },
-        });
+        const res = await fetch(apiUrl, { headers: { 'User-Agent': 'bot' } });
         if (!res.ok) {
             const err = await res.text();
             return { ok: false, error: `${res.status}: ${err}` };
         }
         const data = await res.json();
-        const tweet = data.data;
-        const media = data.includes?.media ?? [];
-        const images = media.filter(m => m.type === 'photo').map(m => m.url ?? m.preview_image_url).filter(Boolean);
+        const tweet = data.tweet;
+        if (!tweet) return { ok: false, error: 'Tweet not found in response' };
+        const photos = tweet.media?.photos ?? [];
+        const images = photos.map(p => p.url).filter(Boolean);
         return {
             ok: true,
             text: tweet.text,
             created_at: tweet.created_at,
             image_url: images[0] ?? null,
-            like_count: tweet.public_metrics?.like_count ?? 0,
-            retweet_count: tweet.public_metrics?.retweet_count ?? 0,
+            like_count: tweet.likes ?? 0,
+            retweet_count: tweet.retweets ?? 0,
         };
     } catch (err) {
         return { ok: false, error: err.message };
@@ -110,21 +109,21 @@ export async function onRequestPost({ request, env }) {
         return new Response('Could not extract tweet ID from tweet_url', { status: 400 });
     }
 
-    // text が未指定の場合、Twitter API v2 から自動取得
-    if (!text && env.TWITTER_BEARER_TOKEN) {
-        const fetched = await fetchTweetFromApi(tweetId, env.TWITTER_BEARER_TOKEN);
+    // text が未指定の場合、FixTweet API から自動取得（APIキー不要）
+    if (!text) {
+        const fetched = await fetchTweetFromFxTwitter(tweet_url);
         if (!fetched.ok) {
-            return new Response(`Twitter API fetch failed: ${fetched.error}`, { status: 502 });
+            return new Response(`FixTweet API fetch failed: ${fetched.error}`, { status: 502 });
         }
-        text       = fetched.text;
-        image_url  = image_url  ?? fetched.image_url;
-        created_at = created_at ?? fetched.created_at;
+        text          = fetched.text;
+        image_url     = image_url  ?? fetched.image_url;
+        created_at    = created_at ?? fetched.created_at;
         like_count    = like_count    ?? fetched.like_count;
         retweet_count = retweet_count ?? fetched.retweet_count;
     }
 
     if (!text) {
-        return new Response('Missing required field: text (TWITTER_BEARER_TOKEN not set for auto-fetch)', { status: 400 });
+        return new Response('Missing required field: text', { status: 400 });
     }
 
     // 挨拶ツイートでなければスキップ (挨拶以外のツイートも IFTTT が送ってくる場合の対策)

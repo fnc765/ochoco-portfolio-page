@@ -1,10 +1,13 @@
 /**
  * GET /api/fetch-tweet?url=<tweet_url>
- * ツイートURLから本文・画像・投稿日・エンゲージメントを取得する
+ * FixTweet API (api.fxtwitter.com) を使ってツイートURL から
+ * 本文・画像・投稿日・エンゲージメントを取得する。
+ * API キー不要・無料。
  *
- * 必要な環境変数:
- *   TWITTER_BEARER_TOKEN  Twitter API v2 Bearer Token
- *     → https://developer.twitter.com/en/portal/dashboard
+ * 対応URL形式:
+ *   https://x.com/ochoco0215/status/12345
+ *   https://x.com/i/status/12345
+ *   https://twitter.com/ochoco0215/status/12345
  *
  * レスポンス例:
  *   {
@@ -18,7 +21,15 @@
  *   }
  */
 
-export async function onRequestGet({ request, env }) {
+function tweetUrlToFxTwitter(tweetUrl) {
+    return tweetUrl
+        .replace('https://x.com/', 'https://api.fxtwitter.com/')
+        .replace('https://twitter.com/', 'https://api.fxtwitter.com/')
+        .replace('http://x.com/', 'https://api.fxtwitter.com/')
+        .replace('http://twitter.com/', 'https://api.fxtwitter.com/');
+}
+
+export async function onRequestGet({ request }) {
     const url = new URL(request.url);
     const tweetUrl = url.searchParams.get('url');
 
@@ -32,47 +43,40 @@ export async function onRequestGet({ request, env }) {
     }
     const tweetId = match[1];
 
-    if (!env.TWITTER_BEARER_TOKEN) {
-        return new Response('TWITTER_BEARER_TOKEN not configured', { status: 503 });
-    }
-
-    const apiUrl =
-        `https://api.twitter.com/2/tweets/${tweetId}` +
-        `?tweet.fields=created_at,text,public_metrics,attachments` +
-        `&expansions=attachments.media_keys` +
-        `&media.fields=url,preview_image_url,type`;
+    const apiUrl = tweetUrlToFxTwitter(tweetUrl);
 
     let apiRes;
     try {
         apiRes = await fetch(apiUrl, {
-            headers: { Authorization: `Bearer ${env.TWITTER_BEARER_TOKEN}` },
+            headers: { 'User-Agent': 'bot' },
         });
     } catch (err) {
-        return new Response(`Failed to reach Twitter API: ${err.message}`, { status: 502 });
+        return new Response(`Failed to reach FixTweet API: ${err.message}`, { status: 502 });
     }
 
     if (!apiRes.ok) {
         const errText = await apiRes.text();
-        return new Response(`Twitter API error ${apiRes.status}: ${errText}`, { status: apiRes.status });
+        return new Response(`FixTweet API error ${apiRes.status}: ${errText}`, { status: apiRes.status });
     }
 
     const data = await apiRes.json();
-    const tweet = data.data;
-    const media = data.includes?.media ?? [];
+    const tweet = data.tweet;
 
-    const images = media
-        .filter(m => m.type === 'photo')
-        .map(m => m.url ?? m.preview_image_url)
-        .filter(Boolean);
+    if (!tweet) {
+        return new Response('Tweet not found', { status: 404 });
+    }
+
+    const photos = tweet.media?.photos ?? [];
+    const images = photos.map(p => p.url).filter(Boolean);
 
     return Response.json({
-        id: tweet.id,
+        id: tweetId,
         text: tweet.text,
         created_at: tweet.created_at,
         image_url: images[0] ?? null,
         images,
-        like_count: tweet.public_metrics?.like_count ?? 0,
-        retweet_count: tweet.public_metrics?.retweet_count ?? 0,
+        like_count: tweet.likes ?? 0,
+        retweet_count: tweet.retweets ?? 0,
     }, {
         headers: { 'Access-Control-Allow-Origin': '*' },
     });
