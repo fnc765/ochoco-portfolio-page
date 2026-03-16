@@ -63,12 +63,23 @@ async function run() {
     }
 
     console.log('[smoke] OK: FixTweet API 疎通確認');
-    console.log(`[smoke]   text       : ${tweet.text.slice(0, 80)}`);
-    console.log(`[smoke]   created_at : ${tweet.created_at}`);
-    console.log(`[smoke]   likes      : ${tweet.likes ?? 0}`);
+    console.log(`[smoke]   text             : ${tweet.text.slice(0, 80)}`);
+    console.log(`[smoke]   created_at       : ${tweet.created_at}`);
+    console.log(`[smoke]   created_timestamp: ${tweet.created_timestamp}`);
+    console.log(`[smoke]   likes            : ${tweet.likes}`);
+    console.log(`[smoke]   retweets         : ${tweet.retweets}`);
+    console.log(`[smoke]   replies          : ${tweet.replies}`);
+    console.log(`[smoke]   views            : ${tweet.views}`);
     const photos = tweet.media?.photos ?? [];
-    console.log(`[smoke]   images     : ${photos.length} 枚`);
-    if (photos[0]) console.log(`[smoke]   image_url  : ${photos[0].url}`);
+    console.log(`[smoke]   images           : ${photos.length} 枚`);
+    if (photos[0]) console.log(`[smoke]   image_url        : ${photos[0].url}`);
+
+    // フィールド名の調査（undefined のものを明示）
+    const fields = ['likes','retweets','created_at','created_timestamp','favorite_count','retweet_count'];
+    console.log('[smoke] --- フィールド存在確認 ---');
+    for (const f of fields) {
+        console.log(`[smoke]   tweet.${f} = ${JSON.stringify(tweet[f])}`);
+    }
 }
 
 run();
