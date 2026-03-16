@@ -68,11 +68,34 @@ jobs:
         run: |
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ochoco-portfolio"
+
+          # 最新デプロイメントの URL を取得
+          DEPLOY_RESP=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
+          DEPLOY_URL=$(echo "$DEPLOY_RESP" | jq -r '.result[0].url // empty')
           SUBDOMAIN=$(curl -sf \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
             | jq -r '.result.subdomain')
+
           echo ""
           echo "=========================================="
-          echo "  Deployed URL: https://$SUBDOMAIN"
+          echo "  デプロイ完了!"
+          echo ""
+          if [ -n "$DEPLOY_URL" ]; then
+          echo "  ★ プレビュー URL (今回のデプロイ):"
+          echo "    $DEPLOY_URL"
+          echo ""
+          fi
+          echo "  本番 URL: https://$SUBDOMAIN"
           echo "=========================================="
+
+          # GitHub Step Summary にも表示
+          {
+            echo "## ✅ デプロイ完了"
+            if [ -n "$DEPLOY_URL" ]; then
+              echo "- **プレビュー URL**: $DEPLOY_URL"
+            fi
+            echo "- **本番 URL**: https://$SUBDOMAIN"
+          } >> "$GITHUB_STEP_SUMMARY"
