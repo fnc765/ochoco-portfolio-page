@@ -51,6 +51,9 @@ jobs:
             echo "Project created."
           fi
 
+      - name: Smoke test - FixTweet API
+        run: node ohatsui/test/smoke-fxtwitter.js
+
       - name: Setup D1 database and bindings
         run: |
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
