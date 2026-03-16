@@ -19,7 +19,14 @@
  *    (デプロイワークフローが自動設定、または Pages ダッシュボードで手動設定)
  * ─────────────────────────────────────────
  *
- * リクエスト例:
+ * text を省略した場合、TWITTER_BEARER_TOKEN が設定されていれば
+ * Twitter API v2 から本文・画像・投稿日を自動取得します。
+ *
+ * リクエスト例 (手動 / tweet_url のみ):
+ *   POST /api/collect?token=xxxxxxxx
+ *   { "tweet_url": "https://x.com/ochoco0215/status/2032988351293526350" }
+ *
+ * リクエスト例 (IFTTT):
  *   POST /api/collect?token=xxxxxxxx
  *   {
  *     "text": "おはちょこ～🍫！今日も北九州散策＆ライブ行ってくるよ～🥳🥳",
@@ -29,6 +36,38 @@
  */
 
 const GREETING_PATTERN = /おはちょこ|こんちょこ|こんばんちょこ|おはよ|おは[～〜！!🍫]/u;
+
+/** Twitter API v2 からツイートデータを取得するヘルパー */
+async function fetchTweetFromApi(tweetId, bearerToken) {
+    const apiUrl =
+        `https://api.twitter.com/2/tweets/${tweetId}` +
+        `?tweet.fields=created_at,text,public_metrics,attachments` +
+        `&expansions=attachments.media_keys` +
+        `&media.fields=url,preview_image_url,type`;
+    try {
+        const res = await fetch(apiUrl, {
+            headers: { Authorization: `Bearer ${bearerToken}` },
+        });
+        if (!res.ok) {
+            const err = await res.text();
+            return { ok: false, error: `${res.status}: ${err}` };
+        }
+        const data = await res.json();
+        const tweet = data.data;
+        const media = data.includes?.media ?? [];
+        const images = media.filter(m => m.type === 'photo').map(m => m.url ?? m.preview_image_url).filter(Boolean);
+        return {
+            ok: true,
+            text: tweet.text,
+            created_at: tweet.created_at,
+            image_url: images[0] ?? null,
+            like_count: tweet.public_metrics?.like_count ?? 0,
+            retweet_count: tweet.public_metrics?.retweet_count ?? 0,
+        };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+}
 
 function detectType(text) {
     if (/こんばんちょこ|こんばんは|こんばん/.test(text)) return 'konbanchoco';
@@ -60,20 +99,37 @@ export async function onRequestPost({ request, env }) {
         return new Response('Invalid JSON', { status: 400 });
     }
 
-    const { text, tweet_url, created_at, image_url } = body ?? {};
+    let { text, tweet_url, created_at, image_url, like_count, retweet_count } = body ?? {};
 
-    if (!text || !tweet_url) {
-        return new Response('Missing required fields: text, tweet_url', { status: 400 });
-    }
-
-    // 挨拶ツイートでなければスキップ (挨拶以外のツイートも IFTTT が送ってくる場合の対策)
-    if (!GREETING_PATTERN.test(text)) {
-        return Response.json({ skipped: true, reason: 'Not a greeting tweet' });
+    if (!tweet_url) {
+        return new Response('Missing required field: tweet_url', { status: 400 });
     }
 
     const tweetId = extractTweetId(tweet_url);
     if (!tweetId) {
         return new Response('Could not extract tweet ID from tweet_url', { status: 400 });
+    }
+
+    // text が未指定の場合、Twitter API v2 から自動取得
+    if (!text && env.TWITTER_BEARER_TOKEN) {
+        const fetched = await fetchTweetFromApi(tweetId, env.TWITTER_BEARER_TOKEN);
+        if (!fetched.ok) {
+            return new Response(`Twitter API fetch failed: ${fetched.error}`, { status: 502 });
+        }
+        text       = fetched.text;
+        image_url  = image_url  ?? fetched.image_url;
+        created_at = created_at ?? fetched.created_at;
+        like_count    = like_count    ?? fetched.like_count;
+        retweet_count = retweet_count ?? fetched.retweet_count;
+    }
+
+    if (!text) {
+        return new Response('Missing required field: text (TWITTER_BEARER_TOKEN not set for auto-fetch)', { status: 400 });
+    }
+
+    // 挨拶ツイートでなければスキップ (挨拶以外のツイートも IFTTT が送ってくる場合の対策)
+    if (!GREETING_PATTERN.test(text)) {
+        return Response.json({ skipped: true, reason: 'Not a greeting tweet' });
     }
 
     // created_at の決定
@@ -91,8 +147,9 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare(
             'INSERT OR REPLACE INTO tweets' +
             ' (id, tweet_id, text, created_at, image_url, like_count, retweet_count, type)' +
-            ' VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, ?6)'
-        ).bind(tweetId, tweetId, text.trim(), createdAt, image_url ?? null, detectType(text))
+            ' VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'
+        ).bind(tweetId, tweetId, text.trim(), createdAt, image_url ?? null,
+               like_count ?? 0, retweet_count ?? 0, detectType(text))
          .run();
 
         console.log(`[collect] 保存: ${tweetId} [${detectType(text)}] ${createdAt.slice(0, 10)}`);
