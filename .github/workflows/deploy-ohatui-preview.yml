@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: write
 
     steps:
       - name: Checkout repository
@@ -121,6 +122,7 @@ jobs:
           command: pages deploy ohatsui --project-name=ohatui-db --commit-dirty=true
 
       - name: Post-deploy validation - fetch-tweet API
+        continue-on-error: true
         shell: bash
         run: |
           set +e  # errexit を無効化（明示的にエラーチェック）
@@ -206,6 +208,35 @@ jobs:
             ERRORS=$((ERRORS+1))
           fi
 
+          # Step Summary に結果を書き出し（成否に関わらず）
+          {
+            if [ "$ERRORS" -gt 0 ]; then
+              echo "## ⚠️ Post-deploy validation FAILED ($ERRORS errors)"
+            else
+              echo "## ✅ Post-deploy validation OK"
+            fi
+            echo ""
+            echo "### API URL"
+            echo '```'
+            echo "$API_URL"
+            echo '```'
+            echo ""
+            echo "### HTTP Status: $HTTP_CODE"
+            echo ""
+            echo "### Response body"
+            echo '```json'
+            echo "$RESPONSE" | head -c 3000
+            echo '```'
+            echo ""
+            echo "### Field check"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| text | ${TEXT:0:80} |"
+            echo "| like_count | $LIKE_COUNT_RAW |"
+            echo "| retweet_count | $RT_COUNT_RAW |"
+            echo "| created_at | $CREATED_AT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$ERRORS" -gt 0 ]; then
             echo ""
             echo "FAIL: $ERRORS 件の検証エラー"
@@ -217,6 +248,7 @@ jobs:
           echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
 
       - name: Show deployed URL and IFTTT setup
+        if: always()
         run: |
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ohatui-db"
