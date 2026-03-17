@@ -121,68 +121,99 @@ jobs:
           command: pages deploy ohatsui --project-name=ohatui-db --commit-dirty=true
 
       - name: Post-deploy validation - fetch-tweet API
+        shell: bash
         run: |
+          set +e  # errexit を無効化（明示的にエラーチェック）
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ohatui-db"
           TEST_TWEET_URL="https://x.com/i/status/2033342224906489994"
+          ENCODED_URL="https%3A%2F%2Fx.com%2Fi%2Fstatus%2F2033342224906489994"
 
           # デプロイ直後は少し待つ（エッジへの伝播）
-          sleep 5
+          echo "=== 15秒待機（エッジ伝播）==="
+          sleep 15
 
           # 最新デプロイメントの URL を取得
-          DEPLOY_URL=$(curl -sf \
+          echo "=== Cloudflare API からデプロイ URL を取得 ==="
+          CF_DEPLOY_RESP=$(curl -sf \
             -H "Authorization: Bearer $CF_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1" \
-            | jq -r '.result[0].url // empty')
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
+          CF_STATUS=$?
+          echo "CF API 応答コード: $CF_STATUS"
+          DEPLOY_URL=$(echo "$CF_DEPLOY_RESP" | jq -r '.result[0].url // empty' 2>/dev/null)
+          echo "デプロイ URL: '$DEPLOY_URL'"
 
           if [ -z "$DEPLOY_URL" ]; then
-            echo "WARNING: デプロイ URL を取得できませんでした。本番 URL で検証します。"
             SUBDOMAIN=$(curl -sf \
               -H "Authorization: Bearer $CF_API_TOKEN" \
               "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
-              | jq -r '.result.subdomain')
+              | jq -r '.result.subdomain' 2>/dev/null)
             DEPLOY_URL="https://$SUBDOMAIN"
+            echo "フォールバック URL: $DEPLOY_URL"
           fi
 
-          echo "検証対象 URL: $DEPLOY_URL"
-          ENCODED_URL=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$TEST_TWEET_URL'))")
           API_URL="$DEPLOY_URL/api/fetch-tweet?url=$ENCODED_URL"
-          echo "API エンドポイント: $API_URL"
+          echo ""
+          echo "=== エンドポイント検証 ==="
+          echo "API URL: $API_URL"
 
-          RESPONSE=$(curl -sf "$API_URL" 2>/dev/null || echo "CURL_FAILED")
+          # HTTP ステータスコードとボディを分けて取得
+          HTTP_CODE=$(curl -s -o /tmp/fetch_response.txt -w "%{http_code}" "$API_URL")
+          CURL_EXIT=$?
+          echo "curl 終了コード: $CURL_EXIT"
+          echo "HTTP ステータス: $HTTP_CODE"
 
-          if [ "$RESPONSE" = "CURL_FAILED" ]; then
-            echo "FAIL: /api/fetch-tweet へのリクエストが失敗しました"
+          RESPONSE=$(cat /tmp/fetch_response.txt)
+          echo "--- レスポンス全体 ---"
+          echo "$RESPONSE" | head -c 2000
+          echo ""
+          echo "--- end ---"
+
+          # JSON 検証
+          if ! echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "FAIL: レスポンスが JSON ではありません (HTTP $HTTP_CODE)"
             exit 1
           fi
 
-          echo "--- レスポンス (全体) ---"
-          echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
-          echo "---"
+          # 各フィールドを取得
+          TEXT=$(echo "$RESPONSE" | jq -r '.text // ""')
+          LIKE_COUNT_RAW=$(echo "$RESPONSE" | jq '.like_count')
+          RT_COUNT_RAW=$(echo "$RESPONSE" | jq '.retweet_count')
+          CREATED_AT=$(echo "$RESPONSE" | jq -r '.created_at // ""')
 
-          # 各フィールドを検証
-          TEXT=$(echo "$RESPONSE" | jq -r '.text // empty')
-          LIKE_COUNT=$(echo "$RESPONSE" | jq -r '.like_count // "MISSING"')
-          RT_COUNT=$(echo "$RESPONSE" | jq -r '.retweet_count // "MISSING"')
-          CREATED_AT=$(echo "$RESPONSE" | jq -r '.created_at // "MISSING"')
+          echo ""
+          echo "=== フィールド検証結果 ==="
+          echo "  text         : ${TEXT:0:80}"
+          echo "  like_count   : $LIKE_COUNT_RAW"
+          echo "  retweet_count: $RT_COUNT_RAW"
+          echo "  created_at   : $CREATED_AT"
 
           ERRORS=0
-          [ -z "$TEXT" ]              && echo "FAIL: text が空" && ERRORS=$((ERRORS+1))
-          [ "$LIKE_COUNT" = "MISSING" ] && echo "FAIL: like_count が欠落" && ERRORS=$((ERRORS+1))
-          [ "$RT_COUNT"   = "MISSING" ] && echo "FAIL: retweet_count が欠落" && ERRORS=$((ERRORS+1))
-          [ "$CREATED_AT" = "MISSING" ] && echo "FAIL: created_at が欠落" && ERRORS=$((ERRORS+1))
+          if [ -z "$TEXT" ]; then
+            echo "FAIL: text が空"
+            ERRORS=$((ERRORS+1))
+          fi
+          if [ "$LIKE_COUNT_RAW" = "null" ] || [ -z "$LIKE_COUNT_RAW" ]; then
+            echo "FAIL: like_count が null/欠落"
+            ERRORS=$((ERRORS+1))
+          fi
+          if [ "$RT_COUNT_RAW" = "null" ] || [ -z "$RT_COUNT_RAW" ]; then
+            echo "FAIL: retweet_count が null/欠落"
+            ERRORS=$((ERRORS+1))
+          fi
+          if [ -z "$CREATED_AT" ]; then
+            echo "FAIL: created_at が空/欠落"
+            ERRORS=$((ERRORS+1))
+          fi
 
           if [ "$ERRORS" -gt 0 ]; then
-            echo "$ERRORS 件の検証エラーがあります。デプロイは完了していますがAPIレスポンスが不完全です。"
+            echo ""
+            echo "FAIL: $ERRORS 件の検証エラー"
             exit 1
           fi
 
-          echo "OK: 全フィールド確認"
-          echo "  text       : $(echo "$TEXT" | head -c 80)"
-          echo "  like_count : $LIKE_COUNT"
-          echo "  retweet_count: $RT_COUNT"
-          echo "  created_at : $CREATED_AT"
-
+          echo ""
+          echo "OK: /api/fetch-tweet 全フィールド確認完了"
           echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
 
       - name: Show deployed URL and IFTTT setup
