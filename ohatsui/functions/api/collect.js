@@ -106,7 +106,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (!env.DB) {
-        return new Response('DB not configured', { status: 503 });
+        return Response.json({ error: 'DB not configured' }, { status: 503 });
     }
 
     let body;
