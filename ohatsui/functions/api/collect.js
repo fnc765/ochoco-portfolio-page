@@ -39,29 +39,47 @@ const GREETING_PATTERN = /おはちょこ|こんちょこ|こんばんちょこ|
 
 /** FixTweet API (api.fxtwitter.com) からツイートデータを取得するヘルパー（APIキー不要） */
 async function fetchTweetFromFxTwitter(tweetUrl) {
-    const apiUrl = tweetUrl
-        .replace('https://x.com/', 'https://api.fxtwitter.com/')
-        .replace('https://twitter.com/', 'https://api.fxtwitter.com/')
-        .replace('http://x.com/', 'https://api.fxtwitter.com/')
-        .replace('http://twitter.com/', 'https://api.fxtwitter.com/');
+    // tweet ID からクリーンな API URL を構築（クエリパラメータ混入を防止）
+    const match = tweetUrl.match(/status\/(\d+)/);
+    const tweetId = match?.[1];
+    if (!tweetId) return { ok: false, error: 'Could not extract tweet ID' };
+
+    const apiUrl = `https://api.fxtwitter.com/i/status/${tweetId}`;
     try {
-        const res = await fetch(apiUrl, { headers: { 'User-Agent': 'bot' } });
+        const res = await fetch(apiUrl, {
+            headers: { 'User-Agent': 'bot' },
+            cf: { cacheTtl: 0 },
+        });
         if (!res.ok) {
-            const err = await res.text();
-            return { ok: false, error: `${res.status}: ${err}` };
+            const err = await res.text().catch(() => '');
+            return { ok: false, error: `${res.status}: ${err.slice(0, 200)}` };
         }
         const data = await res.json();
         const tweet = data.tweet;
         if (!tweet) return { ok: false, error: 'Tweet not found in response' };
+
         const photos = tweet.media?.photos ?? [];
         const images = photos.map(p => p.url).filter(Boolean);
+
+        const likeCount    = tweet.likes    ?? tweet.like_count    ?? tweet.favorites ?? 0;
+        const retweetCount = tweet.retweets ?? tweet.retweet_count ?? tweet.reposts   ?? 0;
+
+        // created_at を ISO 8601 に正規化
+        let createdAt = null;
+        if (tweet.created_timestamp) {
+            createdAt = new Date(tweet.created_timestamp * 1000).toISOString();
+        } else if (tweet.created_at) {
+            const d = new Date(tweet.created_at);
+            createdAt = isNaN(d.getTime()) ? tweet.created_at : d.toISOString();
+        }
+
         return {
             ok: true,
             text: tweet.text,
-            created_at: tweet.created_at,
+            created_at: createdAt,
             image_url: images[0] ?? null,
-            like_count: tweet.likes ?? 0,
-            retweet_count: tweet.retweets ?? 0,
+            like_count: likeCount,
+            retweet_count: retweetCount,
         };
     } catch (err) {
         return { ok: false, error: err.message };

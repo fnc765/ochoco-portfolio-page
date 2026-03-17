@@ -67,7 +67,12 @@
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-          showResult(`取得エラー: ${data.error ?? res.status}`, false);
+          showResult(`取得エラー (HTTP ${res.status}): ${data.error ?? JSON.stringify(data)}`, false);
+          return;
+        }
+
+        if (data.error) {
+          showResult(`取得エラー: ${data.error}`, false);
           return;
         }
 
@@ -77,9 +82,11 @@
         if (data.created_at) {
           // datetime-local は "YYYY-MM-DDTHH:MM" 形式
           const dt = new Date(data.created_at);
-          const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
-            .toISOString().slice(0, 16);
-          document.getElementById('created_at').value = local;
+          if (!isNaN(dt.getTime())) {
+            const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
+              .toISOString().slice(0, 16);
+            document.getElementById('created_at').value = local;
+          }
         }
 
         if (data.image_url) {
@@ -92,10 +99,13 @@
           document.getElementById('preview-img').style.display = 'none';
         }
 
+        const likeCount = data.like_count ?? 'N/A';
+        const rtCount   = data.retweet_count ?? 'N/A';
+        const createdAt = data.created_at ?? 'N/A';
         showResult(
           `取得成功！\n` +
-          `いいね: ${data.like_count}  RT: ${data.retweet_count}\n` +
-          `投稿日時: ${data.created_at}`,
+          `いいね: ${likeCount}  RT: ${rtCount}\n` +
+          `投稿日時: ${createdAt}`,
           true
         );
       } catch (e) {
