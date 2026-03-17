@@ -70,9 +70,13 @@ export async function onRequestGet({ request }) {
     const images = photos.map(p => p.url).filter(Boolean);
 
     // fxtwitter のレスポンスフィールドを候補順に解決
-    const likeCount     = tweet.likes     ?? tweet.like_count     ?? tweet.favorites ?? 0;
-    const retweetCount  = tweet.retweets  ?? tweet.retweet_count  ?? tweet.reposts   ?? 0;
-    const createdAt     = tweet.created_at ?? null;
+    const likeCount    = tweet.likes     ?? tweet.like_count     ?? tweet.favorites ?? 0;
+    const retweetCount = tweet.retweets  ?? tweet.retweet_count  ?? tweet.reposts   ?? 0;
+    // created_at が無ければ created_timestamp (Unix秒) から ISO 変換
+    let createdAt = tweet.created_at ?? null;
+    if (!createdAt && tweet.created_timestamp) {
+        createdAt = new Date(tweet.created_timestamp * 1000).toISOString();
+    }
 
     return Response.json({
         id: tweetId,
@@ -82,15 +86,6 @@ export async function onRequestGet({ request }) {
         images,
         like_count:    likeCount,
         retweet_count: retweetCount,
-        // デバッグ用: 実際のフィールドを確認できるよう一時的に含める
-        _fxtwitter_raw: {
-            likes: tweet.likes,
-            retweets: tweet.retweets,
-            reposts: tweet.reposts,
-            created_at: tweet.created_at,
-            created_timestamp: tweet.created_timestamp,
-            views: tweet.views,
-        },
     }, {
         headers: { 'Access-Control-Allow-Origin': '*' },
     });
