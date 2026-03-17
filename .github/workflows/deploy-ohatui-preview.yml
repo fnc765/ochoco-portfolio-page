@@ -1,10 +1,14 @@
-name: Deploy ohatui-db preview to Cloudflare Pages
+name: Deploy ohatui-db to Cloudflare Pages
 
 on:
   push:
     branches:
+      - main
       - 'claude/deploy-cloudflare-pages-gIUW7'
       - 'claude/fix-tweet-scraping-K1LCg'
+    paths:
+      - 'ohatsui/**'
+      - '.github/workflows/deploy-ohatui-preview.yml'
   workflow_dispatch:
 
 env:
