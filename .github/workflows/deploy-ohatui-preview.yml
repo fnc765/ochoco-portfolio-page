@@ -120,16 +120,84 @@ jobs:
           wranglerVersion: "3.99.0"
           command: pages deploy ohatsui --project-name=ohatui-db --commit-dirty=true
 
+      - name: Post-deploy validation - fetch-tweet API
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          PROJECT_NAME="ohatui-db"
+          TEST_TWEET_URL="https://x.com/i/status/2033342224906489994"
+
+          # デプロイ直後は少し待つ（エッジへの伝播）
+          sleep 5
+
+          # 最新デプロイメントの URL を取得
+          DEPLOY_URL=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1" \
+            | jq -r '.result[0].url // empty')
+
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "WARNING: デプロイ URL を取得できませんでした。本番 URL で検証します。"
+            SUBDOMAIN=$(curl -sf \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
+              | jq -r '.result.subdomain')
+            DEPLOY_URL="https://$SUBDOMAIN"
+          fi
+
+          echo "検証対象 URL: $DEPLOY_URL"
+          ENCODED_URL=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$TEST_TWEET_URL'))")
+          API_URL="$DEPLOY_URL/api/fetch-tweet?url=$ENCODED_URL"
+          echo "API エンドポイント: $API_URL"
+
+          RESPONSE=$(curl -sf "$API_URL" 2>/dev/null || echo "CURL_FAILED")
+
+          if [ "$RESPONSE" = "CURL_FAILED" ]; then
+            echo "FAIL: /api/fetch-tweet へのリクエストが失敗しました"
+            exit 1
+          fi
+
+          echo "--- レスポンス (全体) ---"
+          echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
+          echo "---"
+
+          # 各フィールドを検証
+          TEXT=$(echo "$RESPONSE" | jq -r '.text // empty')
+          LIKE_COUNT=$(echo "$RESPONSE" | jq -r '.like_count // "MISSING"')
+          RT_COUNT=$(echo "$RESPONSE" | jq -r '.retweet_count // "MISSING"')
+          CREATED_AT=$(echo "$RESPONSE" | jq -r '.created_at // "MISSING"')
+
+          ERRORS=0
+          [ -z "$TEXT" ]              && echo "FAIL: text が空" && ERRORS=$((ERRORS+1))
+          [ "$LIKE_COUNT" = "MISSING" ] && echo "FAIL: like_count が欠落" && ERRORS=$((ERRORS+1))
+          [ "$RT_COUNT"   = "MISSING" ] && echo "FAIL: retweet_count が欠落" && ERRORS=$((ERRORS+1))
+          [ "$CREATED_AT" = "MISSING" ] && echo "FAIL: created_at が欠落" && ERRORS=$((ERRORS+1))
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "$ERRORS 件の検証エラーがあります。デプロイは完了していますがAPIレスポンスが不完全です。"
+            exit 1
+          fi
+
+          echo "OK: 全フィールド確認"
+          echo "  text       : $(echo "$TEXT" | head -c 80)"
+          echo "  like_count : $LIKE_COUNT"
+          echo "  retweet_count: $RT_COUNT"
+          echo "  created_at : $CREATED_AT"
+
+          echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
+
       - name: Show deployed URL and IFTTT setup
         run: |
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ohatui-db"
 
-          # 最新デプロイメントの URL を取得
-          DEPLOY_RESP=$(curl -sf \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
-          DEPLOY_URL=$(echo "$DEPLOY_RESP" | jq -r '.result[0].url // empty')
+          # 最新デプロイメントの URL を取得（post-deploy validation で設定済みなら再利用）
+          DEPLOY_URL="${DEPLOY_URL:-}"
+          if [ -z "$DEPLOY_URL" ]; then
+            DEPLOY_RESP=$(curl -sf \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
+            DEPLOY_URL=$(echo "$DEPLOY_RESP" | jq -r '.result[0].url // empty')
+          fi
           SUBDOMAIN=$(curl -sf \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
