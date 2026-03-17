@@ -112,6 +112,71 @@ jobs:
 
           echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
 
+      - name: Pre-deploy local function test (wrangler pages dev)
+        run: |
+          set +e
+          TEST_URL="https://x.com/i/status/2033342224906489994"
+          ENCODED="https%3A%2F%2Fx.com%2Fi%2Fstatus%2F2033342224906489994"
+
+          echo "=== wrangler pages dev でローカル起動 ==="
+          # Node.js がインストール済みであることを前提に wrangler を npx で実行
+          npx wrangler@3.99.0 pages dev ohatsui --port 8788 --log-level warn &
+          WRANGLER_PID=$!
+          echo "wrangler PID: $WRANGLER_PID"
+
+          # 起動待ち（最大30秒）
+          for i in $(seq 1 15); do
+            sleep 2
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8788/" 2>/dev/null)
+            if [ "$HTTP" != "000" ]; then
+              echo "起動確認 (HTTP $HTTP) after ${i}×2 秒"
+              break
+            fi
+          done
+
+          echo ""
+          echo "=== /api/fetch-tweet ローカルテスト ==="
+          HTTP_CODE=$(curl -s -o /tmp/local_response.txt -w "%{http_code}" \
+            "http://localhost:8788/api/fetch-tweet?url=$ENCODED")
+          CURL_EXIT=$?
+          echo "curl 終了コード: $CURL_EXIT  HTTP: $HTTP_CODE"
+
+          RESPONSE=$(cat /tmp/local_response.txt 2>/dev/null || echo "")
+          echo "--- レスポンス ---"
+          echo "$RESPONSE" | head -c 3000
+          echo ""
+          echo "-----------------"
+
+          kill $WRANGLER_PID 2>/dev/null
+          wait $WRANGLER_PID 2>/dev/null
+
+          # JSON チェック
+          if ! echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "FAIL: ローカル関数がJSONを返しませんでした (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+          TEXT=$(echo "$RESPONSE" | jq -r '.text // ""')
+          LIKE_COUNT=$(echo "$RESPONSE" | jq '.like_count')
+          RT_COUNT=$(echo "$RESPONSE" | jq '.retweet_count')
+          CREATED_AT=$(echo "$RESPONSE" | jq -r '.created_at // ""')
+
+          ERRORS=0
+          if [ -z "$TEXT" ]; then echo "FAIL: text が空"; ERRORS=$((ERRORS+1)); fi
+          if [ "$LIKE_COUNT" = "null" ] || [ -z "$LIKE_COUNT" ]; then echo "FAIL: like_count が null/欠落 (値: $LIKE_COUNT)"; ERRORS=$((ERRORS+1)); fi
+          if [ "$RT_COUNT" = "null" ] || [ -z "$RT_COUNT" ]; then echo "FAIL: retweet_count が null/欠落 (値: $RT_COUNT)"; ERRORS=$((ERRORS+1)); fi
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "FAIL: $ERRORS 件の検証エラー (デプロイは行いません)"
+            exit 1
+          fi
+
+          echo "OK: ローカルテスト全フィールド確認完了"
+          echo "  text         : ${TEXT:0:80}"
+          echo "  like_count   : $LIKE_COUNT"
+          echo "  retweet_count: $RT_COUNT"
+          echo "  created_at   : $CREATED_AT"
+
       - name: Deploy ohatsui/ to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
