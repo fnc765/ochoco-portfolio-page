@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - main
-      - 'claude/deploy-cloudflare-pages-gIUW7'
-      - 'claude/fix-tweet-scraping-K1LCg'
+      - ohatui-db
     paths:
       - 'ohatsui/**'
       - '.github/workflows/deploy-ohatui-preview.yml'
