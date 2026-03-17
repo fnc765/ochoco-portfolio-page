@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'claude/deploy-cloudflare-pages-gIUW7'
+      - 'claude/fix-tweet-scraping-K1LCg'
   workflow_dispatch:
 
 env:
