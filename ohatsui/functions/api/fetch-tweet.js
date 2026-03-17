@@ -21,12 +21,37 @@
  *   }
  */
 
-function tweetUrlToFxTwitter(tweetUrl) {
-    return tweetUrl
-        .replace('https://x.com/', 'https://api.fxtwitter.com/')
-        .replace('https://twitter.com/', 'https://api.fxtwitter.com/')
-        .replace('http://x.com/', 'https://api.fxtwitter.com/')
-        .replace('http://twitter.com/', 'https://api.fxtwitter.com/');
+/** ツイート ID からクリーンな FixTweet API URL を構築 */
+function buildFxTwitterUrl(tweetId) {
+    return `https://api.fxtwitter.com/i/status/${tweetId}`;
+}
+
+/** FixTweet tweet オブジェクトから統一フォーマットに変換 */
+function parseTweetFields(tweet, tweetId) {
+    const photos = tweet.media?.photos ?? [];
+    const images = photos.map(p => p.url).filter(Boolean);
+
+    const likeCount    = tweet.likes     ?? tweet.like_count     ?? tweet.favorites ?? 0;
+    const retweetCount = tweet.retweets  ?? tweet.retweet_count  ?? tweet.reposts   ?? 0;
+
+    // created_at を ISO 8601 に正規化
+    let createdAt = null;
+    if (tweet.created_timestamp) {
+        createdAt = new Date(tweet.created_timestamp * 1000).toISOString();
+    } else if (tweet.created_at) {
+        const d = new Date(tweet.created_at);
+        createdAt = isNaN(d.getTime()) ? tweet.created_at : d.toISOString();
+    }
+
+    return {
+        id: tweetId,
+        text: tweet.text ?? '',
+        created_at: createdAt,
+        image_url: images[0] ?? null,
+        images,
+        like_count:    likeCount,
+        retweet_count: retweetCount,
+    };
 }
 
 export async function onRequestGet({ request }) {
@@ -34,59 +59,65 @@ export async function onRequestGet({ request }) {
     const tweetUrl = url.searchParams.get('url');
 
     if (!tweetUrl) {
-        return new Response('Missing url parameter', { status: 400 });
+        return Response.json({ error: 'Missing url parameter' }, { status: 400 });
     }
 
     const match = tweetUrl.match(/status\/(\d+)/);
     if (!match) {
-        return new Response('Could not extract tweet ID from URL', { status: 400 });
+        return Response.json({ error: 'Could not extract tweet ID from URL' }, { status: 400 });
     }
     const tweetId = match[1];
 
-    const apiUrl = tweetUrlToFxTwitter(tweetUrl);
+    // tweet ID からクリーンな API URL を構築（クエリパラメータ混入を防止）
+    const apiUrl = buildFxTwitterUrl(tweetId);
 
     let apiRes;
     try {
         apiRes = await fetch(apiUrl, {
             headers: { 'User-Agent': 'bot' },
+            // Cloudflare Worker 内でのキャッシュを無効化
+            cf: { cacheTtl: 0 },
         });
     } catch (err) {
-        return new Response(`Failed to reach FixTweet API: ${err.message}`, { status: 502 });
+        return Response.json(
+            { error: `Failed to reach FixTweet API: ${err.message}` },
+            { status: 502 },
+        );
     }
 
     if (!apiRes.ok) {
-        const errText = await apiRes.text();
-        return new Response(`FixTweet API error ${apiRes.status}: ${errText}`, { status: apiRes.status });
+        const errText = await apiRes.text().catch(() => '');
+        return Response.json(
+            { error: `FixTweet API error ${apiRes.status}: ${errText.slice(0, 200)}` },
+            { status: apiRes.status },
+        );
     }
 
-    const data = await apiRes.json();
+    let data;
+    try {
+        data = await apiRes.json();
+    } catch (err) {
+        return Response.json(
+            { error: `FixTweet API returned non-JSON: ${err.message}` },
+            { status: 502 },
+        );
+    }
+
     const tweet = data.tweet;
 
     if (!tweet) {
-        return new Response('Tweet not found', { status: 404 });
+        return Response.json(
+            { error: 'Tweet not found in FixTweet response', _keys: Object.keys(data) },
+            { status: 404 },
+        );
     }
 
-    const photos = tweet.media?.photos ?? [];
-    const images = photos.map(p => p.url).filter(Boolean);
+    const result = parseTweetFields(tweet, tweetId);
 
-    // fxtwitter のレスポンスフィールドを候補順に解決
-    const likeCount    = tweet.likes     ?? tweet.like_count     ?? tweet.favorites ?? 0;
-    const retweetCount = tweet.retweets  ?? tweet.retweet_count  ?? tweet.reposts   ?? 0;
-    // created_at が無ければ created_timestamp (Unix秒) から ISO 変換
-    let createdAt = tweet.created_at ?? null;
-    if (!createdAt && tweet.created_timestamp) {
-        createdAt = new Date(tweet.created_timestamp * 1000).toISOString();
-    }
-
-    return Response.json({
-        id: tweetId,
-        text: tweet.text,
-        created_at: createdAt,
-        image_url: images[0] ?? null,
-        images,
-        like_count:    likeCount,
-        retweet_count: retweetCount,
-    }, {
-        headers: { 'Access-Control-Allow-Origin': '*' },
+    return Response.json(result, {
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-store',
+        },
     });
 }

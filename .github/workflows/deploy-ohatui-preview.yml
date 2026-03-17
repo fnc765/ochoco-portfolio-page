@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'claude/deploy-cloudflare-pages-gIUW7'
+      - 'claude/fix-tweet-scraping-K1LCg'
   workflow_dispatch:
 
 env:
@@ -119,7 +120,8 @@ jobs:
           apiToken: ${{ env.CF_API_TOKEN }}
           accountId: ${{ steps.cf-account.outputs.account_id }}
           wranglerVersion: "3.99.0"
-          command: pages deploy ohatsui --project-name=ohatui-db --commit-dirty=true
+          workingDirectory: ohatsui
+          command: pages deploy . --project-name=ohatui-db --commit-dirty=true
 
       - name: Post-deploy validation - fetch-tweet API
         continue-on-error: true
