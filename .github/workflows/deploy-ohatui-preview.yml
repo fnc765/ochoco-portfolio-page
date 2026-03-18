@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - ohatui-db
+      - 'claude/audit-ohatsugi-db-v2Aqm'
     paths:
       - 'ohatsui/**'
       - '.github/workflows/deploy-ohatui-preview.yml'
