@@ -121,6 +121,44 @@ jobs:
           printf '\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "ohatui-tweets"\ndatabase_id = "%s"\n' "$DB_ID" >> ohatsui/wrangler.toml
           echo "wrangler.toml に D1 バインディング追加完了 (database_id=$DB_ID)"
 
+      - name: Setup R2 bucket and bindings
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          BUCKET_NAME="ohatui-images"
+
+          # R2 バケットが存在しなければ作成
+          R2_LIST=$(curl -s \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2/buckets")
+          echo "R2_LIST success: $(echo "$R2_LIST" | jq -r '.success')"
+          BUCKET_EXISTS=$(echo "$R2_LIST" | jq -r ".buckets[] | select(.name == \"$BUCKET_NAME\") | .name // empty" 2>/dev/null | head -1)
+
+          if [ -z "$BUCKET_EXISTS" ]; then
+            echo "R2 bucket '$BUCKET_NAME' を作成..."
+            CREATE_RESP=$(curl -s -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$BUCKET_NAME\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2/buckets")
+            echo "CREATE response: $(echo "$CREATE_RESP" | jq '{success, errors}')"
+          else
+            echo "R2 bucket '$BUCKET_NAME' は既に存在"
+          fi
+
+          # Pages プロジェクトに R2 バインディングを設定
+          R2_PATCH_BODY="{\"deployment_configs\":{\"production\":{\"r2_buckets\":{\"IMAGES\":{\"name\":\"$BUCKET_NAME\"}}},\"preview\":{\"r2_buckets\":{\"IMAGES\":{\"name\":\"$BUCKET_NAME\"}}}}}"
+
+          R2_PATCH_RESP=$(curl -s -X PATCH \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$R2_PATCH_BODY" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/ohatui-db")
+          echo "R2 バインディング設定: $(echo "$R2_PATCH_RESP" | jq '{success, errors}')"
+
+          # wrangler.toml に R2 バインディングを追加
+          printf '\n[[r2_buckets]]\nbinding = "IMAGES"\nbucket_name = "%s"\n' "$BUCKET_NAME" >> ohatsui/wrangler.toml
+          echo "wrangler.toml に R2 バインディング追加完了 (bucket=$BUCKET_NAME)"
+
       - name: Deploy ohatsui/ to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
