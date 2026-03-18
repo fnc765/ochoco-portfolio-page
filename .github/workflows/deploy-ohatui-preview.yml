@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - ohatui-db
+      - claude/fix-admin-503-error-FB96a
     paths:
       - 'ohatsui/**'
       - '.github/workflows/deploy-ohatui-preview.yml'
