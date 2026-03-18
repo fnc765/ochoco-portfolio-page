@@ -42,6 +42,7 @@ from pathlib import Path
 try:
     import boto3
     import requests
+    from botocore.exceptions import ClientError as BotoClientError
     from PIL import Image
 except ImportError as e:
     print(f"必要なパッケージが不足: {e}")
@@ -96,7 +97,7 @@ def check_r2_exists(r2_client, key):
     try:
         r2_client.head_object(Bucket=R2_BUCKET, Key=key)
         return True
-    except r2_client.exceptions.ClientError:
+    except BotoClientError:
         return False
 
 

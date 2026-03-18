@@ -57,15 +57,6 @@
         return `/api/image/${tweet.id}`;
     }
 
-    /** img要素にonerrorハンドラを設定（プレースホルダーへフォールバック） */
-    function addImageFallback(imgEl, type) {
-        if (!imgEl) return;
-        imgEl.onerror = function() {
-            this.onerror = null;
-            this.src = `/api/image/0`; // プレースホルダー
-        };
-    }
-
     // ===================================
     // データ取得・処理
     // ===================================
