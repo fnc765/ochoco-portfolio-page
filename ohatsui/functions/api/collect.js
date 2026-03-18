@@ -97,7 +97,41 @@ function extractTweetId(tweetUrl) {
     return match?.[1] ?? null;
 }
 
-export async function onRequestPost({ request, env }) {
+/** Twitter画像を取得してR2に small サイズ (680px幅) で保存（ベストエフォート） */
+async function cacheImageToR2(imagesBucket, tweetId, imageUrl) {
+    try {
+        let fetchUrl = imageUrl;
+        try {
+            const url = new URL(imageUrl);
+            if (url.hostname === 'pbs.twimg.com') {
+                url.searchParams.set('format', 'jpg');
+                url.searchParams.set('name', 'small');
+                fetchUrl = url.toString();
+            }
+        } catch { /* URL パース失敗時はそのまま */ }
+
+        const res = await fetch(fetchUrl, {
+            headers: { 'User-Agent': 'bot' },
+            cf: { cacheTtl: 0 },
+        });
+        if (!res.ok) {
+            console.warn(`[collect] R2 cache skip: fetch ${res.status} for ${tweetId}`);
+            return;
+        }
+
+        const buffer = await res.arrayBuffer();
+        const contentType = res.headers.get('Content-Type') || 'image/jpeg';
+        await imagesBucket.put(`images/small/${tweetId}.jpg`, buffer, {
+            httpMetadata: { contentType },
+        });
+        console.log(`[collect] R2 cached: images/small/${tweetId}.jpg`);
+    } catch (err) {
+        console.warn(`[collect] R2 cache error for ${tweetId}: ${err.message}`);
+    }
+}
+
+export async function onRequestPost(context) {
+    const { request, env } = context;
     // 認証チェック (COLLECT_SECRET が設定されている場合のみ)
     const url = new URL(request.url);
     const token = url.searchParams.get('token');
@@ -170,6 +204,12 @@ export async function onRequestPost({ request, env }) {
          .run();
 
         console.log(`[collect] 保存: ${tweetId} [${detectType(text)}] ${createdAt.slice(0, 10)}`);
+
+        // R2 にサムネイルをキャッシュ（ベストエフォート、レスポンスをブロックしない）
+        if (image_url && env.IMAGES) {
+            context.waitUntil(cacheImageToR2(env.IMAGES, tweetId, image_url));
+        }
+
         return Response.json({ ok: true, id: tweetId, type: detectType(text) });
     } catch (err) {
         console.error('[collect] D1 error:', err);

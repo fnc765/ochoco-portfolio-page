@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - ohatui-db
+      - 'claude/audit-ohatsugi-db-v2Aqm'
     paths:
       - 'ohatsui/**'
       - '.github/workflows/deploy-ohatui-preview.yml'
@@ -97,12 +98,13 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database/$DB_ID/query")
           echo "スキーマ適用: $(echo "$SCHEMA_RESP" | jq '{success, errors}')"
 
-          # Pages プロジェクトに D1 バインディングを設定
-          PATCH_BODY="{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}}}}}"
+          # Pages プロジェクトに D1 + R2 バインディングを一括設定
+          # (個別PATCHだと後のPATCHが先の設定を上書きするため、1リクエストにまとめる)
+          PATCH_BODY="{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"r2_buckets\":{\"IMAGES\":{\"name\":\"ohatui-images\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"r2_buckets\":{\"IMAGES\":{\"name\":\"ohatui-images\"}}}}}"
 
           # COLLECT_SECRET が設定されていれば環境変数にも追加
           if [ -n "${{ secrets.COLLECT_SECRET }}" ]; then
-            PATCH_BODY="{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"env_vars\":{\"COLLECT_SECRET\":{\"value\":\"${{ secrets.COLLECT_SECRET }}\",\"type\":\"secret_text\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"env_vars\":{\"COLLECT_SECRET\":{\"value\":\"${{ secrets.COLLECT_SECRET }}\",\"type\":\"secret_text\"}}}}}"
+            PATCH_BODY="{\"deployment_configs\":{\"production\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"r2_buckets\":{\"IMAGES\":{\"name\":\"ohatui-images\"}},\"env_vars\":{\"COLLECT_SECRET\":{\"value\":\"${{ secrets.COLLECT_SECRET }}\",\"type\":\"secret_text\"}}},\"preview\":{\"d1_databases\":{\"DB\":{\"id\":\"$DB_ID\"}},\"r2_buckets\":{\"IMAGES\":{\"name\":\"ohatui-images\"}},\"env_vars\":{\"COLLECT_SECRET\":{\"value\":\"${{ secrets.COLLECT_SECRET }}\",\"type\":\"secret_text\"}}}}}"
             echo "COLLECT_SECRET を Pages 環境変数に設定します"
           else
             echo "COLLECT_SECRET が未設定です (GitHub Secret 'COLLECT_SECRET' を追加してください)"
@@ -113,13 +115,41 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PATCH_BODY" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/ohatui-db")
-          echo "D1 バインディング設定: $(echo "$PATCH_RESP" | jq '{success, errors}')"
+          echo "D1+R2 バインディング設定: $(echo "$PATCH_RESP" | jq '{success, errors}')"
 
           echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
 
           # wrangler.toml に D1 バインディングを追加（wrangler pages deploy で反映される）
           printf '\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "ohatui-tweets"\ndatabase_id = "%s"\n' "$DB_ID" >> ohatsui/wrangler.toml
           echo "wrangler.toml に D1 バインディング追加完了 (database_id=$DB_ID)"
+
+      - name: Setup R2 bucket and bindings
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          BUCKET_NAME="ohatui-images"
+
+          # R2 バケットが存在しなければ作成
+          R2_LIST=$(curl -s \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2/buckets")
+          echo "R2_LIST success: $(echo "$R2_LIST" | jq -r '.success')"
+          BUCKET_EXISTS=$(echo "$R2_LIST" | jq -r ".result.buckets[] | select(.name == \"$BUCKET_NAME\") | .name // empty" 2>/dev/null | head -1)
+
+          if [ -z "$BUCKET_EXISTS" ]; then
+            echo "R2 bucket '$BUCKET_NAME' を作成..."
+            CREATE_RESP=$(curl -s -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$BUCKET_NAME\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2/buckets")
+            echo "CREATE response: $(echo "$CREATE_RESP" | jq '{success, errors}')"
+          else
+            echo "R2 bucket '$BUCKET_NAME' は既に存在"
+          fi
+
+          # wrangler.toml に R2 バインディングを追加（APIバインディングは D1 ステップで一括設定済み）
+          printf '\n[[r2_buckets]]\nbinding = "IMAGES"\nbucket_name = "%s"\n' "$BUCKET_NAME" >> ohatsui/wrangler.toml
+          echo "wrangler.toml に R2 バインディング追加完了 (bucket=$BUCKET_NAME)"
 
       - name: Deploy ohatsui/ to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

@@ -51,6 +51,12 @@
         return new Date(d.getFullYear(), d.getMonth(), d.getDate());
     }
 
+    /** R2キャッシュ経由のサムネイルURLを返す。image_url がない場合は null */
+    function getThumbnailUrl(tweet) {
+        if (!tweet.image_url) return null;
+        return `/api/image/${tweet.id}`;
+    }
+
     // ===================================
     // データ取得・処理
     // ===================================
@@ -106,7 +112,7 @@
 
         const images = tweets
             .filter(t => t.image_url)
-            .map(t => t.image_url);
+            .map(t => getThumbnailUrl(t));
 
         if (images.length === 0) return;
 
@@ -156,10 +162,11 @@
 
         const t = todayTweets[0];
 
-        if (t.image_url) {
+        const todayThumb = getThumbnailUrl(t);
+        if (todayThumb) {
             container.innerHTML = `
                 <div class="today-card-inner">
-                    <img src="${t.image_url}" alt="今日のおはつい" class="today-image" data-tweet-id="${t.id}">
+                    <img src="${todayThumb}" alt="今日のおはつい" class="today-image" data-tweet-id="${t.id}">
                     <div class="today-info">
                         ${getTypeBadge(t.type)}
                         <p class="today-text">${escapeHtml(t.text)}</p>
@@ -216,9 +223,10 @@
 
         container.innerHTML = matchingTweets.map(t => {
             const year = new Date(t.created_at).getFullYear();
+            const thumb = getThumbnailUrl(t);
             return `
                 <div class="onthisday-card" data-tweet-id="${t.id}">
-                    <img src="${t.image_url}" alt="${year}年のおはつい" loading="lazy">
+                    ${thumb ? `<img src="${thumb}" alt="${year}年のおはつい" loading="lazy">` : ''}
                     <div class="onthisday-card-body">
                         <p class="onthisday-year">${year}年</p>
                         <p class="onthisday-text">${escapeHtml(t.text)}</p>
@@ -514,8 +522,9 @@
     }
 
     function renderFunTweet(container, t) {
+        const thumb = getThumbnailUrl(t);
         container.innerHTML = `
-            <img src="${t.image_url}" alt="おはつい" loading="lazy">
+            ${thumb ? `<img src="${thumb}" alt="おはつい" loading="lazy">` : ''}
             <p class="fun-tweet-text">${escapeHtml(t.text)}</p>
             <p class="fun-tweet-date">${formatDate(t.created_at)}</p>
         `;
@@ -560,10 +569,11 @@
 
         container.innerHTML = items.map(t => {
             const ms = milestones[t.id];
+            const thumb = getThumbnailUrl(t);
             return `
                 <div class="gallery-item" data-tweet-id="${t.id}">
                     ${ms ? `<span class="milestone-badge">${ms}回目</span>` : ""}
-                    <img src="${t.image_url}" alt="おはつい" loading="lazy">
+                    ${thumb ? `<img src="${thumb}" alt="おはつい" loading="lazy">` : ''}
                     <div class="gallery-item-info">
                         <p class="gallery-item-text">${escapeHtml(t.text)}</p>
                         <p class="gallery-item-date">${formatDate(t.created_at)}</p>
@@ -594,8 +604,9 @@
 
         const ms = milestones[t.id];
 
+        const modalThumb = getThumbnailUrl(t);
         body.innerHTML = `
-            <img src="${t.image_url}" alt="おはつい" class="modal-image">
+            ${modalThumb ? `<img src="${modalThumb}" alt="おはつい" class="modal-image">` : ''}
             <div class="modal-body-inner">
                 ${getTypeBadge(t.type)}
                 <p class="modal-text">${escapeHtml(t.text)}</p>

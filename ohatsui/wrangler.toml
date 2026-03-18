@@ -10,3 +10,10 @@
 name = "ohatui-db"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "."
+
+# R2 バインディングはデプロイワークフローで自動設定されます。
+# ローカル開発:
+#   wrangler pages dev . --d1=DB --r2=IMAGES
+# [[r2_buckets]]
+# binding = "IMAGES"
+# bucket_name = "ohatui-images"
