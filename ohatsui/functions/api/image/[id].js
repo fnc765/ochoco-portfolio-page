@@ -9,17 +9,16 @@
  *   env.DB     → D1 database "ohatui-tweets"
  */
 
-const R2_KEY_PREFIX = 'thumbnails/';
+const R2_KEY_PREFIX = 'images/small/';
 
-/** Twitter画像URLを小サイズに変換 */
+/** Twitter画像URLを small サイズ (680px幅) に変換 */
 function toSmallImageUrl(imageUrl) {
     if (!imageUrl) return null;
-    // pbs.twimg.com の画像は ?name=small で 680px幅、?name=thumb で 150px幅
     try {
         const url = new URL(imageUrl);
         if (url.hostname === 'pbs.twimg.com') {
             url.searchParams.set('format', 'jpg');
-            url.searchParams.set('name', 'thumb');
+            url.searchParams.set('name', 'small');
             return url.toString();
         }
     } catch {

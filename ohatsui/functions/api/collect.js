@@ -97,16 +97,15 @@ function extractTweetId(tweetUrl) {
     return match?.[1] ?? null;
 }
 
-/** Twitter画像を取得してR2にサムネイルとして保存（ベストエフォート） */
+/** Twitter画像を取得してR2に small サイズ (680px幅) で保存（ベストエフォート） */
 async function cacheImageToR2(imagesBucket, tweetId, imageUrl) {
     try {
-        // pbs.twimg.com の場合は ?name=thumb で小サイズ取得
         let fetchUrl = imageUrl;
         try {
             const url = new URL(imageUrl);
             if (url.hostname === 'pbs.twimg.com') {
                 url.searchParams.set('format', 'jpg');
-                url.searchParams.set('name', 'thumb');
+                url.searchParams.set('name', 'small');
                 fetchUrl = url.toString();
             }
         } catch { /* URL パース失敗時はそのまま */ }
@@ -122,10 +121,10 @@ async function cacheImageToR2(imagesBucket, tweetId, imageUrl) {
 
         const buffer = await res.arrayBuffer();
         const contentType = res.headers.get('Content-Type') || 'image/jpeg';
-        await imagesBucket.put(`thumbnails/${tweetId}.jpg`, buffer, {
+        await imagesBucket.put(`images/small/${tweetId}.jpg`, buffer, {
             httpMetadata: { contentType },
         });
-        console.log(`[collect] R2 cached: thumbnails/${tweetId}.jpg`);
+        console.log(`[collect] R2 cached: images/small/${tweetId}.jpg`);
     } catch (err) {
         console.warn(`[collect] R2 cache error for ${tweetId}: ${err.message}`);
     }
