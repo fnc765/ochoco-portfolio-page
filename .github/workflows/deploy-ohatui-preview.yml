@@ -118,13 +118,7 @@ jobs:
           echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
 
           # wrangler.toml に D1 バインディングを追加（wrangler pages deploy で反映される）
-          cat >> ohatsui/wrangler.toml <<TOML_EOF
-
-[[d1_databases]]
-binding = "DB"
-database_name = "ohatui-tweets"
-database_id = "$DB_ID"
-TOML_EOF
+          printf '\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "ohatui-tweets"\ndatabase_id = "%s"\n' "$DB_ID" >> ohatsui/wrangler.toml
           echo "wrangler.toml に D1 バインディング追加完了 (database_id=$DB_ID)"
 
       - name: Deploy ohatsui/ to Cloudflare Pages
