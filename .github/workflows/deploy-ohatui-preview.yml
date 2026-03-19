@@ -113,16 +113,16 @@ jobs:
           if [ -n "$COLLECT_SECRET_VAL" ]; then
             ENV_CONFIG=$(jq -n --arg secret "$COLLECT_SECRET_VAL" \
               '{ env_vars: { COLLECT_SECRET: { value: $secret, type: "secret_text" } } }')
-            PROD_CONFIG=$(echo "$BASE_CONFIG $ENV_CONFIG" | jq -s 'add')
-            echo "COLLECT_SECRET を Pages 環境変数に設定します"
+            FULL_CONFIG=$(echo "$BASE_CONFIG $ENV_CONFIG" | jq -s 'add')
+            echo "COLLECT_SECRET を本番・プレビュー両環境の Pages 環境変数に設定します"
           else
-            PROD_CONFIG="$BASE_CONFIG"
+            FULL_CONFIG="$BASE_CONFIG"
             echo "COLLECT_SECRET が未設定です (GitHub Secret 'COLLECT_SECRET' を追加してください)"
           fi
 
           PATCH_BODY=$(jq -n \
-            --argjson prod "$PROD_CONFIG" \
-            --argjson prev "$BASE_CONFIG" \
+            --argjson prod "$FULL_CONFIG" \
+            --argjson prev "$FULL_CONFIG" \
             '{ deployment_configs: { production: $prod, preview: $prev } }')
 
           PATCH_RESP=$(curl -s -X PATCH \
