@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  CF_API_TOKEN: WctE7mePBsrd8bP8zKKRk9bI4d_i7kHfFKiM7-Un
+  CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
 jobs:
   deploy:
