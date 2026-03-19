@@ -133,11 +133,12 @@
       if (dtVal)    body.created_at = new Date(dtVal).toISOString();
       if (imageUrl) body.image_url  = imageUrl;
 
-      const params = token ? `?token=${encodeURIComponent(token)}` : '';
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       try {
-        const res  = await fetch(`/api/collect${params}`, {
+        const res  = await fetch('/api/collect', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));

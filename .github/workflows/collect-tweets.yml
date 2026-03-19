@@ -19,7 +19,7 @@ on:
         default: true
 
 env:
-  CF_API_TOKEN: WctE7mePBsrd8bP8zKKRk9bI4d_i7kHfFKiM7-Un
+  CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
 jobs:
   info:
@@ -47,7 +47,7 @@ jobs:
             | jq -r '.result[] | select(.name == "ohatui-tweets") | .uuid')
 
           echo ""
-          echo "  CF_API_TOKEN=WctE7mePBsrd8bP8zKKRk9bI4d_i7kHfFKiM7-Un"
+          echo "  CF_API_TOKEN=<GitHub Secrets の CF_API_TOKEN を使用>"
           echo "  CF_ACCOUNT_ID=$ACCOUNT_ID"
           echo "  CF_D1_DATABASE_ID=$DB_ID"
           echo ""
