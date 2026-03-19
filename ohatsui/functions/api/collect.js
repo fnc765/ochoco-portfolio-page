@@ -140,7 +140,7 @@ export async function onRequestPost(context) {
     // タイミング攻撃を防ぐため定数時間比較 (crypto.subtle.timingSafeEqual) を使用
     const secret = env.COLLECT_SECRET;
     if (!secret) {
-        return new Response('Unauthorized', { status: 401 });
+        return Response.json({ error: 'COLLECT_SECRET not configured' }, { status: 503 });
     }
     const authHeader = request.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -150,7 +150,7 @@ export async function onRequestPost(context) {
     const authorized = tokenBytes.byteLength === secretBytes.byteLength &&
         crypto.subtle.timingSafeEqual(tokenBytes, secretBytes);
     if (!authorized) {
-        return new Response('Unauthorized', { status: 401 });
+        return Response.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     if (!env.DB) {
