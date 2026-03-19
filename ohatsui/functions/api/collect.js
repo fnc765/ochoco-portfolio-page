@@ -9,9 +9,11 @@
  * 2. 新しい Applet を作成
  *    If:   X (Twitter) > "New tweet by you"
  *    Then: Webhooks > "Make a web request"
- *          URL:          https://ohatui-db.pages.dev/api/collect?token=<COLLECT_SECRET>
+ *          URL:          https://ohatui-db.pages.dev/api/collect
  *          Method:       POST
  *          Content Type: application/json
+ *          Additional headers:
+ *            Authorization: Bearer <COLLECT_SECRET>
  *          Body:
  *            {"text":"{{Text}}","tweet_url":"{{LinkToTweet}}","created_at":"{{CreatedAt}}"}
  *
@@ -23,11 +25,13 @@
  * 本文・画像・投稿日を自動取得します（APIキー不要・無料）。
  *
  * リクエスト例 (手動 / tweet_url のみ):
- *   POST /api/collect?token=xxxxxxxx
+ *   POST /api/collect
+ *   Authorization: Bearer xxxxxxxx
  *   { "tweet_url": "https://x.com/ochoco0215/status/2032988351293526350" }
  *
  * リクエスト例 (IFTTT):
- *   POST /api/collect?token=xxxxxxxx
+ *   POST /api/collect
+ *   Authorization: Bearer xxxxxxxx
  *   {
  *     "text": "おはちょこ～🍫！今日も北九州散策＆ライブ行ってくるよ～🥳🥳",
  *     "tweet_url": "https://twitter.com/ochoco0215/status/2032988351293526350",
@@ -132,11 +136,21 @@ async function cacheImageToR2(imagesBucket, tweetId, imageUrl) {
 
 export async function onRequestPost(context) {
     const { request, env } = context;
-    // 認証チェック (COLLECT_SECRET が設定されている場合のみ)
-    const url = new URL(request.url);
-    const token = url.searchParams.get('token');
-    if (env.COLLECT_SECRET && token !== env.COLLECT_SECRET) {
-        return new Response('Unauthorized', { status: 401 });
+    // 認証チェック: COLLECT_SECRET が未設定なら 503、トークン不一致なら 401
+    // タイミング攻撃を防ぐため定数時間比較 (crypto.subtle.timingSafeEqual) を使用
+    const secret = env.COLLECT_SECRET;
+    if (!secret) {
+        return Response.json({ error: 'COLLECT_SECRET not configured' }, { status: 503 });
+    }
+    const authHeader = request.headers.get('Authorization') ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const encoder = new TextEncoder();
+    const tokenBytes = encoder.encode(token);
+    const secretBytes = encoder.encode(secret);
+    const authorized = tokenBytes.byteLength === secretBytes.byteLength &&
+        crypto.subtle.timingSafeEqual(tokenBytes, secretBytes);
+    if (!authorized) {
+        return Response.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     if (!env.DB) {
