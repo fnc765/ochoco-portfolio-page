@@ -6,6 +6,7 @@ on:
       - main
       - ohatui-db
       - 'claude/audit-ohatsugi-db-v2Aqm'
+      - 'claude/add-tweet-auth-secret-syZIZ'
     paths:
       - 'ohatsui/**'
       - '.github/workflows/deploy-ohatui-preview.yml'
