@@ -185,7 +185,7 @@ jobs:
           accountId: ${{ steps.cf-account.outputs.account_id }}
           wranglerVersion: "3.99.0"
           workingDirectory: basePortfolio
-          command: pages deploy . --project-name=ochoco-portfolio --commit-dirty=true
+          command: pages deploy --project-name=ochoco-portfolio --commit-dirty=true
 
       - name: Post-deploy validation - fetch-tweet API
         continue-on-error: true
