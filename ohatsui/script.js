@@ -116,27 +116,58 @@
 
         if (images.length === 0) return;
 
-        const rowCount = 4;
         const tilesPerRow = 20;
+        const MAX_ROWS = 12;
+        let prevRowCount = -1;
+        let prevTileSize = -1;
 
-        for (let row = 0; row < rowCount; row++) {
-            const rowEl = document.createElement("div");
-            rowEl.className = `tile-row ${row % 2 === 0 ? "tile-row-left" : "tile-row-right"}`;
-
-            // 2セット分（無限ループ用）
-            for (let set = 0; set < 2; set++) {
-                for (let i = 0; i < tilesPerRow; i++) {
-                    const img = document.createElement("img");
-                    const idx = (row * tilesPerRow + i) % images.length;
-                    img.src = images[idx];
-                    img.alt = "";
-                    img.loading = "lazy";
-                    rowEl.appendChild(img);
-                }
-            }
-
-            container.appendChild(rowEl);
+        function calcTileSize() {
+            return window.innerWidth <= 768 ? 120 : 150;
         }
+
+        function calcRowCount(tileSize) {
+            const tileHeight = tileSize + 8; // img height + margin-bottom/gap
+            return Math.min(Math.ceil(window.innerHeight / tileHeight) + 1, MAX_ROWS);
+        }
+
+        function buildRows() {
+            const tileSize = calcTileSize();
+            const rowCount = calcRowCount(tileSize);
+
+            // 値が変わっていなければ再構築しない
+            if (rowCount === prevRowCount && tileSize === prevTileSize) return;
+            prevRowCount = rowCount;
+            prevTileSize = tileSize;
+
+            container.innerHTML = "";
+            for (let row = 0; row < rowCount; row++) {
+                const rowEl = document.createElement("div");
+                rowEl.className = `tile-row ${row % 2 === 0 ? "tile-row-left" : "tile-row-right"}`;
+
+                // 2セット分（無限ループ用）
+                for (let set = 0; set < 2; set++) {
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        const img = document.createElement("img");
+                        const idx = (row * tilesPerRow + i) % images.length;
+                        img.src = images[idx];
+                        img.alt = "";
+                        img.loading = "lazy";
+                        rowEl.appendChild(img);
+                    }
+                }
+
+                container.appendChild(rowEl);
+            }
+        }
+
+        // 重複登録防止: 前回のリスナーがあれば除去
+        if (initTileBackground._resizeHandler) {
+            window.removeEventListener("resize", initTileBackground._resizeHandler);
+        }
+        initTileBackground._resizeHandler = debounce(buildRows, 300);
+
+        buildRows();
+        window.addEventListener("resize", initTileBackground._resizeHandler);
     }
 
     // ===================================
