@@ -39,7 +39,7 @@
  *   }
  */
 
-const GREETING_PATTERN = /おはちょこ|こんちょこ|こんばんちょこ|おはよ|おは[～〜！!🍫]/u;
+const GREETING_PATTERN = /おはちょこ|こんちょこ|こんばんちょこ/u;
 
 /** FixTweet API (api.fxtwitter.com) からツイートデータを取得するヘルパー（APIキー不要） */
 async function fetchTweetFromFxTwitter(tweetUrl) {
@@ -192,9 +192,12 @@ export async function onRequestPost(context) {
         return new Response('Missing required field: text', { status: 400 });
     }
 
-    // 挨拶ツイートでなければスキップ (挨拶以外のツイートも IFTTT が送ってくる場合の対策)
+    // 挨拶ツイート（おはちょこ/こんちょこ/こんばんちょこ）以外は登録拒否
     if (!GREETING_PATTERN.test(text)) {
-        return Response.json({ skipped: true, reason: 'Not a greeting tweet' });
+        return Response.json(
+            { error: 'Not a greeting tweet', detail: 'Text must contain おはちょこ, こんちょこ, or こんばんちょこ' },
+            { status: 400 },
+        );
     }
 
     // created_at の決定
