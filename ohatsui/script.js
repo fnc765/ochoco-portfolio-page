@@ -567,6 +567,8 @@
     const ITEMS_PER_PAGE = 12;
     let currentPage = 1;
     let filteredTweets = [];
+    let galleryObserver = null;
+    let isLoadingMore = false;
 
     function filterTweets() {
         const text = document.getElementById("search-text")?.value.toLowerCase() || "";
@@ -584,24 +586,32 @@
         });
 
         currentPage = 1;
-        renderGallery();
+        renderGallery(false);
+        initInfiniteScroll();
     }
 
-    function renderGallery() {
+    function renderGallery(append = false) {
         const container = document.getElementById("gallery-grid");
-        const loadBtn = document.getElementById("load-more-btn");
         const info = document.getElementById("search-result-info");
         if (!container) return;
 
-        const items = filteredTweets.slice(0, currentPage * ITEMS_PER_PAGE);
-        const hasMore = items.length < filteredTweets.length;
+        const start = append ? (currentPage - 1) * ITEMS_PER_PAGE : 0;
+        const end = currentPage * ITEMS_PER_PAGE;
+        const items = filteredTweets.slice(start, end);
+        const hasMore = end < filteredTweets.length;
+
+        if (!append) {
+            container.innerHTML = "";
+        }
 
         if (info) info.textContent = `${filteredTweets.length}件のおはつい`;
 
-        container.innerHTML = items.map(t => {
+        const fragment = document.createDocumentFragment();
+        items.forEach(t => {
             const ms = milestones[t.id];
             const thumb = getThumbnailUrl(t);
-            return `
+            const wrapper = document.createElement("div");
+            wrapper.innerHTML = `
                 <div class="gallery-item" data-tweet-id="${t.id}">
                     ${ms ? `<span class="milestone-badge">${ms}回目</span>` : ""}
                     ${thumb ? `<img src="${thumb}" alt="おはつい" loading="lazy">` : ''}
@@ -611,18 +621,50 @@
                     </div>
                 </div>
             `;
-        }).join("");
-
-        if (loadBtn) loadBtn.style.display = hasMore ? "block" : "none";
-
-        // クリックイベント
-        container.querySelectorAll(".gallery-item").forEach(item => {
-            item.addEventListener("click", () => {
-                const id = item.dataset.tweetId;
-                const tweet = tweets.find(t => t.id === id);
-                if (tweet) openModal(tweet);
-            });
+            const itemEl = wrapper.firstElementChild;
+            itemEl.addEventListener("click", () => openModal(t));
+            fragment.appendChild(itemEl);
         });
+        container.appendChild(fragment);
+
+        const sentinel = document.getElementById("scroll-sentinel");
+        if (sentinel) {
+            sentinel.style.display = hasMore ? "block" : "none";
+            if (!hasMore && galleryObserver) {
+                galleryObserver.disconnect();
+                galleryObserver = null;
+            }
+        }
+
+        const loadBtn = document.getElementById("load-more-btn");
+        if (loadBtn) loadBtn.style.display = "none";
+    }
+
+    function initInfiniteScroll() {
+        const sentinel = document.getElementById("scroll-sentinel");
+        if (!sentinel) return;
+
+        if (galleryObserver) {
+            galleryObserver.disconnect();
+        }
+
+        galleryObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && !isLoadingMore) {
+                    const hasMore = currentPage * ITEMS_PER_PAGE < filteredTweets.length;
+                    if (hasMore) {
+                        isLoadingMore = true;
+                        currentPage++;
+                        renderGallery(true);
+                        isLoadingMore = false;
+                    }
+                }
+            });
+        }, {
+            rootMargin: "200px"
+        });
+
+        galleryObserver.observe(sentinel);
     }
 
     // ===================================
@@ -712,15 +754,11 @@
         renderFortune();
 
         // ギャラリー
-        renderGallery();
+        renderGallery(false);
+        initInfiniteScroll();
 
         // イベントリスナー
         document.getElementById("random-btn")?.addEventListener("click", renderRandomTweet);
-
-        document.getElementById("load-more-btn")?.addEventListener("click", () => {
-            currentPage++;
-            renderGallery();
-        });
 
         // 検索
         document.getElementById("search-text")?.addEventListener("input", debounce(filterTweets, 300));
