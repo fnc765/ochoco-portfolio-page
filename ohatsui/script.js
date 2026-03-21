@@ -57,12 +57,6 @@
         return `/api/image/${tweet.id}`;
     }
 
-    /** large版の画像URLを返す（ライトボックス用） */
-    function getLargeImageUrl(tweet) {
-        if (!tweet.image_url) return null;
-        return `/api/image/${tweet.id}?size=large`;
-    }
-
     // ===================================
     // データ取得・処理
     // ===================================
@@ -684,9 +678,8 @@
         const ms = milestones[t.id];
 
         const modalThumb = getThumbnailUrl(t);
-        const modalLarge = getLargeImageUrl(t);
         body.innerHTML = `
-            ${modalThumb ? `<img src="${modalThumb}" alt="おはつい" class="modal-image" style="cursor:zoom-in;" data-full-src="${modalLarge}">` : ''}
+            ${modalThumb ? `<img src="${modalThumb}" alt="おはつい" class="modal-image" style="cursor:zoom-in;" data-full-src="${modalThumb}">` : ''}
             <div class="modal-body-inner">
                 ${getTypeBadge(t.type)}
                 <p class="modal-text">${escapeHtml(t.text)}</p>
@@ -703,7 +696,7 @@
         // 画像クリックでライトボックス表示
         const modalImg = body.querySelector(".modal-image");
         if (modalImg) {
-            modalImg.addEventListener("click", () => openLightbox(modalImg.dataset.fullSrc || modalImg.src));
+            modalImg.addEventListener("click", () => openLightbox(modalImg.src));
         }
 
         modal.style.display = "flex";
