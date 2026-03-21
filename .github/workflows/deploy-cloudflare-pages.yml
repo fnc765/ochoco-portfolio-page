@@ -8,7 +8,7 @@ on:
       - 'claude/deploy-cloudflare-pages-gIUW7'
       - 'claude/check-tweet-endpoint-W6pxz'
     paths:
-      - 'basePortfolio/**'
+      - 'particleAnimation/**'
       - 'ohatsui/functions/**'
       - 'ohatsui/test/**'
       - '.github/workflows/deploy-cloudflare-pages.yml'
@@ -67,12 +67,12 @@ jobs:
       - name: Smoke test - FixTweet API
         run: node ohatsui/test/smoke-fxtwitter.js
 
-      - name: Copy latest functions to basePortfolio
+      - name: Copy latest functions to particleAnimation
         run: |
-          rm -rf basePortfolio/functions
-          cp -r ohatsui/functions basePortfolio/functions
-          echo "functions/ を basePortfolio にコピー完了"
-          ls -la basePortfolio/functions/api/
+          rm -rf particleAnimation/functions
+          cp -r ohatsui/functions particleAnimation/functions
+          echo "functions/ を particleAnimation にコピー完了"
+          ls -la particleAnimation/functions/api/
 
       - name: Setup D1 database and bindings
         run: |
@@ -147,7 +147,7 @@ jobs:
           echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
 
           # wrangler.toml に D1 バインディングを追加
-          printf '\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "ohatui-tweets"\ndatabase_id = "%s"\n' "$DB_ID" >> basePortfolio/wrangler.toml
+          printf '\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "ohatui-tweets"\ndatabase_id = "%s"\n' "$DB_ID" >> particleAnimation/wrangler.toml
           echo "wrangler.toml に D1 バインディング追加完了 (database_id=$DB_ID)"
 
       - name: Setup R2 bucket and bindings
@@ -175,7 +175,7 @@ jobs:
           fi
 
           # wrangler.toml に R2 バインディングを追加
-          printf '\n[[r2_buckets]]\nbinding = "IMAGES"\nbucket_name = "%s"\n' "$BUCKET_NAME" >> basePortfolio/wrangler.toml
+          printf '\n[[r2_buckets]]\nbinding = "IMAGES"\nbucket_name = "%s"\n' "$BUCKET_NAME" >> particleAnimation/wrangler.toml
           echo "wrangler.toml に R2 バインディング追加完了 (bucket=$BUCKET_NAME)"
 
       - name: Deploy to Cloudflare Pages
@@ -184,7 +184,7 @@ jobs:
           apiToken: ${{ env.CF_API_TOKEN }}
           accountId: ${{ steps.cf-account.outputs.account_id }}
           wranglerVersion: "3.99.0"
-          workingDirectory: basePortfolio
+          workingDirectory: particleAnimation
           command: pages deploy --project-name=ochoco-portfolio --commit-dirty=true
 
       - name: Post-deploy validation - fetch-tweet API
