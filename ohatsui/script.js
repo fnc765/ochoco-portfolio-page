@@ -689,7 +689,7 @@
                     <span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>
                 </div>
                 ${ms ? `<div class="modal-milestone">${ms}回目のおはつい！</div>` : ""}
-                ${t.tweet_id ? `<a href="https://x.com/i/web/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="modal-tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> Xで見る</a>` : ""}
+                ${t.tweet_id ? `<a href="https://x.com/i/web/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
             </div>
         `;
 

@@ -989,24 +989,8 @@ body {
     text-align: center;
 }
 
-.modal-tweet-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
+.modal-body-inner .tweet-link {
     margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 0.5rem;
-    color: #fff;
-    text-decoration: none;
-    font-size: 0.85rem;
-    font-weight: 600;
-    transition: background 0.3s ease;
-}
-
-.modal-tweet-link:hover {
-    background: rgba(255, 255, 255, 0.18);
 }
 
 /* ===================================
