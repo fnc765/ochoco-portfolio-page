@@ -1,0 +1,5 @@
+name = "ochoco-portfolio"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+# D1 and R2 bindings are configured via deploy workflow

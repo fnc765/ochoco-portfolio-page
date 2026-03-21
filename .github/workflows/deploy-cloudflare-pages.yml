@@ -4,7 +4,14 @@ on:
   push:
     branches:
       - main
+      - ohatui-db
       - 'claude/deploy-cloudflare-pages-gIUW7'
+      - 'claude/check-tweet-endpoint-W6pxz'
+    paths:
+      - 'particleAnimation/**'
+      - 'ohatsui/functions/**'
+      - 'ohatsui/test/**'
+      - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
 
 env:
@@ -15,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: write
 
     steps:
       - name: Checkout repository
@@ -56,24 +64,239 @@ jobs:
             echo "Project created."
           fi
 
+      - name: Smoke test - FixTweet API
+        run: node ohatsui/test/smoke-fxtwitter.js
+
+      - name: Copy latest functions to particleAnimation
+        run: |
+          rm -rf particleAnimation/functions
+          cp -r ohatsui/functions particleAnimation/functions
+          echo "functions/ を particleAnimation にコピー完了"
+          ls -la particleAnimation/functions/api/
+
+      - name: Setup D1 database and bindings
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          PROJECT_NAME="ochoco-portfolio"
+
+          # D1 データベースが存在しなければ作成
+          DB_LIST=$(curl -s \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database?per_page=100")
+          echo "DB_LIST success: $(echo "$DB_LIST" | jq -r '.success')"
+          DB_ID=$(echo "$DB_LIST" | jq -r '.result[] | select(.name == "ohatui-tweets") | .uuid // empty' | head -1)
+
+          if [ -z "$DB_ID" ]; then
+            echo "D1 database 'ohatui-tweets' を作成..."
+            CREATE_RESP=$(curl -s -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"ohatui-tweets"}' \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database")
+            echo "CREATE response: $(echo "$CREATE_RESP" | jq '{success, errors}')"
+            DB_ID=$(echo "$CREATE_RESP" | jq -r '.result.uuid // empty')
+            echo "作成完了: $DB_ID"
+          else
+            echo "D1 database 'ohatui-tweets' は既に存在: $DB_ID"
+          fi
+
+          if [ -z "$DB_ID" ]; then
+            echo "ERROR: DB_ID を取得できませんでした。D1 API レスポンスを確認してください。"
+            exit 1
+          fi
+
+          # スキーマ適用
+          SCHEMA_RESP=$(curl -s -X POST \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"sql\":\"CREATE TABLE IF NOT EXISTS tweets (id TEXT PRIMARY KEY, tweet_id TEXT UNIQUE NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL, image_url TEXT, like_count INTEGER NOT NULL DEFAULT 0, retweet_count INTEGER NOT NULL DEFAULT 0, type TEXT NOT NULL DEFAULT 'ohachoco' CHECK(type IN ('ohachoco','konchoco','konbanchoco'))); CREATE INDEX IF NOT EXISTS idx_created_at ON tweets(created_at); CREATE INDEX IF NOT EXISTS idx_type ON tweets(type);\"}" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/d1/database/$DB_ID/query")
+          echo "スキーマ適用: $(echo "$SCHEMA_RESP" | jq '{success, errors}')"
+
+          # Pages プロジェクトに D1 + R2 バインディングを一括設定
+          BASE_CONFIG=$(jq -n \
+            --arg db_id "$DB_ID" \
+            '{
+              d1_databases: { DB: { id: $db_id } },
+              r2_buckets: { IMAGES: { name: "ohatui-images" } }
+            }')
+
+          COLLECT_SECRET_VAL="${{ secrets.COLLECT_SECRET }}"
+          if [ -n "$COLLECT_SECRET_VAL" ]; then
+            ENV_CONFIG=$(jq -n --arg secret "$COLLECT_SECRET_VAL" \
+              '{ env_vars: { COLLECT_SECRET: { value: $secret, type: "secret_text" } } }')
+            FULL_CONFIG=$(echo "$BASE_CONFIG $ENV_CONFIG" | jq -s 'add')
+            echo "COLLECT_SECRET を本番・プレビュー両環境の Pages 環境変数に設定します"
+          else
+            FULL_CONFIG="$BASE_CONFIG"
+            echo "COLLECT_SECRET が未設定です (GitHub Secret 'COLLECT_SECRET' を追加してください)"
+          fi
+
+          PATCH_BODY=$(jq -n \
+            --argjson prod "$FULL_CONFIG" \
+            --argjson prev "$FULL_CONFIG" \
+            '{ deployment_configs: { production: $prod, preview: $prev } }')
+
+          PATCH_RESP=$(curl -s -X PATCH \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PATCH_BODY" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME")
+          echo "D1+R2 バインディング設定: $(echo "$PATCH_RESP" | jq '{success, errors}')"
+
+          echo "D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
+
+          # wrangler.toml に D1 バインディングを追加
+          printf '\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "ohatui-tweets"\ndatabase_id = "%s"\n' "$DB_ID" >> particleAnimation/wrangler.toml
+          echo "wrangler.toml に D1 バインディング追加完了 (database_id=$DB_ID)"
+
+      - name: Setup R2 bucket and bindings
+        run: |
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          BUCKET_NAME="ohatui-images"
+
+          # R2 バケットが存在しなければ作成
+          R2_LIST=$(curl -s \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2/buckets")
+          echo "R2_LIST success: $(echo "$R2_LIST" | jq -r '.success')"
+          BUCKET_EXISTS=$(echo "$R2_LIST" | jq -r ".result.buckets[] | select(.name == \"$BUCKET_NAME\") | .name // empty" 2>/dev/null | head -1)
+
+          if [ -z "$BUCKET_EXISTS" ]; then
+            echo "R2 bucket '$BUCKET_NAME' を作成..."
+            CREATE_RESP=$(curl -s -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$BUCKET_NAME\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2/buckets")
+            echo "CREATE response: $(echo "$CREATE_RESP" | jq '{success, errors}')"
+          else
+            echo "R2 bucket '$BUCKET_NAME' は既に存在"
+          fi
+
+          # wrangler.toml に R2 バインディングを追加
+          printf '\n[[r2_buckets]]\nbinding = "IMAGES"\nbucket_name = "%s"\n' "$BUCKET_NAME" >> particleAnimation/wrangler.toml
+          echo "wrangler.toml に R2 バインディング追加完了 (bucket=$BUCKET_NAME)"
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ env.CF_API_TOKEN }}
           accountId: ${{ steps.cf-account.outputs.account_id }}
           wranglerVersion: "3.99.0"
-          command: pages deploy basePortfolio --project-name=ochoco-portfolio --commit-dirty=true
+          workingDirectory: particleAnimation
+          command: pages deploy --project-name=ochoco-portfolio --commit-dirty=true
+
+      - name: Post-deploy validation - fetch-tweet API
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
+          PROJECT_NAME="ochoco-portfolio"
+          ENCODED_URL="https%3A%2F%2Fx.com%2Fi%2Fstatus%2F2033342224906489994"
+
+          echo "=== 15秒待機（エッジ伝播）==="
+          sleep 15
+
+          echo "=== Cloudflare API からデプロイ URL を取得 ==="
+          CF_DEPLOY_RESP=$(curl -sf \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
+          DEPLOY_URL=$(echo "$CF_DEPLOY_RESP" | jq -r '.result[0].url // empty' 2>/dev/null)
+          echo "デプロイ URL: '$DEPLOY_URL'"
+
+          if [ -z "$DEPLOY_URL" ]; then
+            SUBDOMAIN=$(curl -sf \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
+              | jq -r '.result.subdomain' 2>/dev/null)
+            DEPLOY_URL="https://$SUBDOMAIN"
+            echo "フォールバック URL: $DEPLOY_URL"
+          fi
+
+          API_URL="$DEPLOY_URL/api/fetch-tweet?url=$ENCODED_URL"
+          echo ""
+          echo "=== エンドポイント検証 ==="
+          echo "API URL: $API_URL"
+
+          HTTP_CODE=$(curl -s -o /tmp/fetch_response.txt -w "%{http_code}" "$API_URL")
+          echo "HTTP ステータス: $HTTP_CODE"
+
+          RESPONSE=$(cat /tmp/fetch_response.txt)
+          echo "--- レスポンス全体 ---"
+          echo "$RESPONSE" | head -c 2000
+          echo ""
+
+          if ! echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "FAIL: レスポンスが JSON ではありません (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+          TEXT=$(echo "$RESPONSE" | jq -r '.text // ""')
+          LIKE_COUNT_RAW=$(echo "$RESPONSE" | jq '.like_count')
+          RT_COUNT_RAW=$(echo "$RESPONSE" | jq '.retweet_count')
+          CREATED_AT=$(echo "$RESPONSE" | jq -r '.created_at // ""')
+
+          echo ""
+          echo "=== フィールド検証結果 ==="
+          echo "  text         : ${TEXT:0:80}"
+          echo "  like_count   : $LIKE_COUNT_RAW"
+          echo "  retweet_count: $RT_COUNT_RAW"
+          echo "  created_at   : $CREATED_AT"
+
+          ERRORS=0
+          [ -z "$TEXT" ] && echo "FAIL: text が空" && ERRORS=$((ERRORS+1))
+          ([ "$LIKE_COUNT_RAW" = "null" ] || [ -z "$LIKE_COUNT_RAW" ]) && echo "FAIL: like_count が null/欠落" && ERRORS=$((ERRORS+1))
+          ([ "$RT_COUNT_RAW" = "null" ] || [ -z "$RT_COUNT_RAW" ]) && echo "FAIL: retweet_count が null/欠落" && ERRORS=$((ERRORS+1))
+          [ -z "$CREATED_AT" ] && echo "FAIL: created_at が空/欠落" && ERRORS=$((ERRORS+1))
+
+          {
+            if [ "$ERRORS" -gt 0 ]; then
+              echo "## Post-deploy validation FAILED ($ERRORS errors)"
+            else
+              echo "## Post-deploy validation OK"
+            fi
+            echo ""
+            echo "### API URL"
+            echo '```'
+            echo "$API_URL"
+            echo '```'
+            echo "### HTTP Status: $HTTP_CODE"
+            echo "### Response body"
+            echo '```json'
+            echo "$RESPONSE" | head -c 3000
+            echo '```'
+            echo "### Field check"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| text | ${TEXT:0:80} |"
+            echo "| like_count | $LIKE_COUNT_RAW |"
+            echo "| retweet_count | $RT_COUNT_RAW |"
+            echo "| created_at | $CREATED_AT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "FAIL: $ERRORS 件の検証エラー"
+            exit 1
+          fi
+
+          echo "OK: /api/fetch-tweet 全フィールド確認完了"
+          echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
 
       - name: Show deployed URL
+        if: always()
         run: |
           ACCOUNT_ID="${{ steps.cf-account.outputs.account_id }}"
           PROJECT_NAME="ochoco-portfolio"
 
-          # 最新デプロイメントの URL を取得
-          DEPLOY_RESP=$(curl -sf \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
-          DEPLOY_URL=$(echo "$DEPLOY_RESP" | jq -r '.result[0].url // empty')
+          DEPLOY_URL="${DEPLOY_URL:-}"
+          if [ -z "$DEPLOY_URL" ]; then
+            DEPLOY_RESP=$(curl -sf \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments?per_page=1")
+            DEPLOY_URL=$(echo "$DEPLOY_RESP" | jq -r '.result[0].url // empty')
+          fi
           SUBDOMAIN=$(curl -sf \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
@@ -84,18 +307,19 @@ jobs:
           echo "  デプロイ完了!"
           echo ""
           if [ -n "$DEPLOY_URL" ]; then
-          echo "  ★ プレビュー URL (今回のデプロイ):"
-          echo "    $DEPLOY_URL"
+          echo "  プレビュー URL: $DEPLOY_URL"
+          echo "  おはついDB:     $DEPLOY_URL/ohatui-db/"
           echo ""
           fi
-          echo "  本番 URL: https://$SUBDOMAIN"
+          echo "  本番 URL:       https://$SUBDOMAIN"
+          echo "  おはついDB:     https://$SUBDOMAIN/ohatui-db/"
           echo "=========================================="
 
-          # GitHub Step Summary にも表示
           {
-            echo "## ✅ デプロイ完了"
+            echo "## デプロイ完了"
             if [ -n "$DEPLOY_URL" ]; then
               echo "- **プレビュー URL**: $DEPLOY_URL"
             fi
             echo "- **本番 URL**: https://$SUBDOMAIN"
+            echo "- **おはついDB**: https://$SUBDOMAIN/ohatui-db/"
           } >> "$GITHUB_STEP_SUMMARY"

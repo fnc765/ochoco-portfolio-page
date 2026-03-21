@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>おはついアーカイブ - おちょこ</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="おちょこのVRChatおはついアーカイブ。毎日のおはちょこ・こんちょこ・こんばんちょこを記録しています。">
+    <meta name="keywords" content="おちょこ, ochoco, おはつい, おはちょこ, VRChat">
+    <meta name="author" content="おちょこ">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="おはついアーカイブ - おちょこ">
+    <meta property="og:description" content="おちょこのVRChatおはついアーカイブ">
+    <meta property="og:image" content="https://fnchoco.com/images/profile.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="おはついアーカイブ - おちょこ">
+    <meta property="twitter:description" content="おちょこのVRChatおはついアーカイブ">
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#141414">
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍫</text></svg>">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 背景タイル -->
+    <div id="tile-background" aria-hidden="true"></div>
+
+    <!-- ローディング画面 -->
+    <div id="loader" role="status" aria-live="polite" aria-label="ページを読み込んでいます">
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="loading-text">Loading...</p>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <main id="content">
+        <!-- ヘッダー -->
+        <header class="page-header">
+            <a href="/" class="back-link" aria-label="ポートフォリオに戻る">
+                <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                <span>Portfolio</span>
+            </a>
+            <h1 class="page-title">おはついアーカイブ</h1>
+            <p class="page-subtitle">おちょこの毎日のごあいさつ記録</p>
+        </header>
+
+        <!-- 今日のおはつい -->
+        <section class="section" id="today-section">
+            <h2 class="section-title">
+                <i class="fas fa-sun" aria-hidden="true"></i>
+                今日のおはつい
+            </h2>
+            <div id="today-content" class="today-card">
+                <!-- JSで動的に生成 -->
+            </div>
+        </section>
+
+        <!-- 去年の今日 -->
+        <section class="section" id="onthisday-section">
+            <h2 class="section-title">
+                <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
+                去年の今日
+            </h2>
+            <div id="onthisday-content" class="onthisday-grid">
+                <!-- JSで動的に生成 -->
+            </div>
+        </section>
+
+        <!-- 統計情報 -->
+        <section class="section" id="stats-section">
+            <h2 class="section-title">
+                <i class="fas fa-chart-bar" aria-hidden="true"></i>
+                統計情報
+            </h2>
+            <div class="stats-grid">
+                <div class="stat-card" id="stat-total">
+                    <div class="stat-value">-</div>
+                    <div class="stat-label">総おはつい数</div>
+                </div>
+                <div class="stat-card" id="stat-streak">
+                    <div class="stat-value">-</div>
+                    <div class="stat-label">現在の連続日数</div>
+                </div>
+                <div class="stat-card" id="stat-max-streak">
+                    <div class="stat-value">-</div>
+                    <div class="stat-label">最長連続記録</div>
+                </div>
+                <div class="stat-card" id="stat-clock">
+                    <div class="stat-value">-</div>
+                    <div class="stat-label">おちょこの朝</div>
+                </div>
+            </div>
+
+            <!-- 種類別カウント -->
+            <div class="stat-detail-card" id="type-distribution">
+                <h3 class="stat-detail-title">あいさつの種類</h3>
+                <div id="type-bars" class="type-bars">
+                    <!-- JSで動的に生成 -->
+                </div>
+            </div>
+
+            <!-- 今月の達成率 -->
+            <div class="stat-detail-card" id="monthly-progress">
+                <h3 class="stat-detail-title">今月のおはつい達成率</h3>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar">
+                        <span class="progress-text" id="progress-text">0%</span>
+                    </div>
+                </div>
+                <p class="progress-detail" id="progress-detail"></p>
+            </div>
+
+            <!-- 曜日別 -->
+            <div class="stat-detail-card" id="weekday-stats">
+                <h3 class="stat-detail-title">曜日別おはつい率</h3>
+                <div id="weekday-bars" class="weekday-bars">
+                    <!-- JSで動的に生成 -->
+                </div>
+            </div>
+
+            <!-- カレンダーヒートマップ -->
+            <div class="stat-detail-card" id="heatmap-section">
+                <h3 class="stat-detail-title">おはついカレンダー</h3>
+                <div class="heatmap-controls">
+                    <button class="heatmap-nav" id="heatmap-prev" aria-label="前の月">
+                        <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                    </button>
+                    <span id="heatmap-month-label" class="heatmap-month-label"></span>
+                    <button class="heatmap-nav" id="heatmap-next" aria-label="次の月">
+                        <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div id="heatmap" class="heatmap-grid">
+                    <!-- JSで動的に生成 -->
+                </div>
+                <div class="heatmap-legend">
+                    <span class="legend-label">なし</span>
+                    <span class="legend-cell" style="background: rgba(255,255,255,0.1)"></span>
+                    <span class="legend-cell" style="background: rgba(139,195,74,0.5)"></span>
+                    <span class="legend-cell" style="background: rgba(139,195,74,0.8)"></span>
+                    <span class="legend-cell" style="background: #8bc34a"></span>
+                    <span class="legend-label">あり</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- おもしろ機能 -->
+        <section class="section" id="fun-section">
+            <h2 class="section-title">
+                <i class="fas fa-star" aria-hidden="true"></i>
+                おたのしみ
+            </h2>
+            <div class="fun-grid">
+                <!-- ランダムおはつい -->
+                <div class="fun-card">
+                    <h3 class="fun-card-title">
+                        <i class="fas fa-shuffle" aria-hidden="true"></i>
+                        ランダムおはつい
+                    </h3>
+                    <div id="random-tweet" class="fun-tweet-display">
+                        <!-- JSで動的に生成 -->
+                    </div>
+                    <button class="fun-button" id="random-btn">
+                        <i class="fas fa-dice" aria-hidden="true"></i>
+                        もう一回！
+                    </button>
+                </div>
+
+                <!-- おはつい占い -->
+                <div class="fun-card">
+                    <h3 class="fun-card-title">
+                        <i class="fas fa-crystal-ball" aria-hidden="true"></i>
+                        今日のラッキーおはつい
+                    </h3>
+                    <div id="fortune-tweet" class="fun-tweet-display">
+                        <!-- JSで動的に生成 -->
+                    </div>
+                    <p class="fortune-message" id="fortune-message"></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- おはつい一覧・検索 -->
+        <section class="section" id="gallery-section">
+            <h2 class="section-title">
+                <i class="fas fa-images" aria-hidden="true"></i>
+                おはつい一覧
+            </h2>
+
+            <!-- 検索フィルター -->
+            <div class="search-controls">
+                <div class="search-input-wrap">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="text" id="search-text" placeholder="テキストで検索..." class="search-input" aria-label="テキスト検索">
+                </div>
+                <div class="search-filters">
+                    <input type="date" id="search-date-from" class="search-date" aria-label="開始日">
+                    <span class="search-date-sep">〜</span>
+                    <input type="date" id="search-date-to" class="search-date" aria-label="終了日">
+                    <select id="search-type" class="search-select" aria-label="種類フィルター">
+                        <option value="">すべて</option>
+                        <option value="ohachoco">おはちょこ</option>
+                        <option value="konchoco">こんちょこ</option>
+                        <option value="konbanchoco">こんばんちょこ</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="search-result-info" id="search-result-info"></div>
+
+            <!-- ギャラリー -->
+            <div id="gallery-grid" class="gallery-grid">
+                <!-- JSで動的に生成 -->
+            </div>
+
+            <button class="load-more-btn" id="load-more-btn" style="display:none;">
+                もっと見る
+            </button>
+            <div id="scroll-sentinel" style="height: 1px;"></div>
+        </section>
+
+        <!-- フッター -->
+        <footer class="page-footer">
+            <p>&copy; 2025 ochoco. All rights reserved.</p>
+        </footer>
+    </main>
+
+    <!-- ツイート詳細モーダル -->
+    <div id="tweet-modal" class="modal" role="dialog" aria-modal="true" aria-label="おはつい詳細" style="display:none;">
+        <div class="modal-overlay" id="modal-overlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="modal-close" aria-label="閉じる">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+            <div id="modal-body">
+                <!-- JSで動的に生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="mock-data.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
