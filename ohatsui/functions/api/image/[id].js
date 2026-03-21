@@ -9,16 +9,17 @@
  *   env.DB     → D1 database "ohatui-tweets"
  */
 
-const R2_KEY_PREFIX = 'images/small/';
+const VALID_SIZES = { small: 'small', large: 'large' };
+const DEFAULT_SIZE = 'small';
 
-/** Twitter画像URLを small サイズ (680px幅) に変換 */
-function toSmallImageUrl(imageUrl) {
+/** Twitter画像URLを指定サイズに変換 (small=680px, large=1200px) */
+function toSizedImageUrl(imageUrl, size) {
     if (!imageUrl) return null;
     try {
         const url = new URL(imageUrl);
         if (url.hostname === 'pbs.twimg.com') {
             url.searchParams.set('format', 'jpg');
-            url.searchParams.set('name', 'small');
+            url.searchParams.set('name', size);
             return url.toString();
         }
     } catch {
@@ -43,13 +44,15 @@ function generatePlaceholder(type) {
 </svg>`;
 }
 
-export async function onRequestGet({ params, env }) {
+export async function onRequestGet({ params, env, request }) {
     const tweetId = params.id;
     if (!tweetId || !/^\d+$/.test(tweetId)) {
         return new Response('Invalid tweet ID', { status: 400 });
     }
 
-    const r2Key = `${R2_KEY_PREFIX}${tweetId}.jpg`;
+    const url = new URL(request.url);
+    const size = VALID_SIZES[url.searchParams.get('size')] || DEFAULT_SIZE;
+    const r2Key = `images/${size}/${tweetId}.jpg`;
 
     // 1. R2 から取得を試みる
     if (env.IMAGES) {
@@ -83,7 +86,7 @@ export async function onRequestGet({ params, env }) {
     }
 
     // 3. Twitter から画像を取得
-    const smallUrl = toSmallImageUrl(row.image_url);
+    const smallUrl = toSizedImageUrl(row.image_url, size);
     let imageRes;
     try {
         imageRes = await fetch(smallUrl, {
