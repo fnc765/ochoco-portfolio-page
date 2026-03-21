@@ -7,6 +7,7 @@ on:
       - ohatui-db
       - 'claude/deploy-cloudflare-pages-gIUW7'
       - 'claude/check-tweet-endpoint-W6pxz'
+      - 'claude/add-modal-features-4dSqR'
     paths:
       - 'particleAnimation/**'
       - 'ohatsui/functions/**'
