@@ -8,6 +8,7 @@ on:
       - 'claude/deploy-cloudflare-pages-gIUW7'
       - 'claude/check-tweet-endpoint-W6pxz'
       - 'claude/add-modal-features-4dSqR'
+      - 'claude/auto-update-daily-tweets-p5JCY'
     paths:
       - 'particleAnimation/**'
       - 'ohatsui/functions/**'
