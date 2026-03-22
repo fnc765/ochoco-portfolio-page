@@ -100,13 +100,27 @@ startAutoUpdate() でタイマー開始（1時間間隔）
 
 ## 実装ステップ
 
-1. `ohatsui/functions/api/refresh-today.js` を新規作成
-   - D1から今日のツイートを取得
+1. ✅ `ohatsui/functions/api/refresh-today.js` を新規作成
+   - D1から今日のツイート（JST基準）を取得
    - FixTweet APIで最新エンゲージメント取得
    - D1のlike_count/retweet_countをUPDATE
    - 更新済みデータを返す
-2. `ohatsui/script.js` に `refreshToday()` 関数を追加
+2. ✅ `.github/workflows/refresh-today-tweets.yml` を新規作成
+   - GitHub Actions cron で JST 6:00〜23:00 の毎時00分に実行
+   - `GET /api/refresh-today` を呼び出してD1を更新
+   - ページを開いていなくてもサーバー側で自動更新される
+3. `ohatsui/script.js` に `refreshToday()` 関数を追加（フロントエンド側、任意）
    - `/api/refresh-today` を呼び出し → ローカルデータ更新 → renderToday()
-3. `ohatsui/script.js` に自動更新タイマー管理を追加
+4. `ohatsui/script.js` に自動更新タイマー管理を追加（フロントエンド側、任意）
    - `startAutoUpdate()` / `stopAutoUpdate()` / `visibilitychange` リスナー
-4. `DOMContentLoaded` の最後で `startAutoUpdate()` を呼び出す
+5. `DOMContentLoaded` の最後で `startAutoUpdate()` を呼び出す（フロントエンド側、任意）
+
+## サーバー側定期実行（GitHub Actions cron）
+
+フロントエンドの `setInterval` はブラウザを開いている時だけ動作するため、
+サーバー側で確実にデータを更新する仕組みとして GitHub Actions cron を採用。
+
+- **スケジュール:** JST 6:00〜23:00 の毎時00分（UTC 21:00〜14:00）
+- **実行内容:** `curl` で `GET /api/refresh-today` を呼び出し
+- **手動実行:** `workflow_dispatch` で手動トリガーも可能
+- **コスト:** GitHub Actions 無料枠内（月2,000分）で十分収まる

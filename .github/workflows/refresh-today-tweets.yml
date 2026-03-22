@@ -1,0 +1,40 @@
+name: Refresh Today's Tweets
+
+# 毎日 JST 6:00〜23:00 の毎時00分に実行 (UTC 21:00〜14:00)
+# cron は UTC 基準なので JST-9h で設定
+on:
+  schedule:
+    # UTC 21:00 = JST 06:00
+    # UTC 22:00 = JST 07:00
+    # ...
+    # UTC 14:00 = JST 23:00
+    - cron: '0 21-23,0-14 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/refresh-today
+        run: |
+          SITE_URL="https://ochoco-portfolio.pages.dev"
+          API_URL="$SITE_URL/api/refresh-today"
+
+          echo "=== Calling $API_URL ==="
+          echo "Time (UTC): $(date -u)"
+
+          HTTP_CODE=$(curl -s -o /tmp/refresh_response.txt -w "%{http_code}" "$API_URL")
+          RESPONSE=$(cat /tmp/refresh_response.txt)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response:"
+          echo "$RESPONSE" | head -c 2000
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            UPDATED_COUNT=$(echo "$RESPONSE" | jq '.updated | length' 2>/dev/null || echo "?")
+            echo ""
+            echo "OK: $UPDATED_COUNT tweet(s) refreshed"
+          else
+            echo ""
+            echo "WARN: API returned HTTP $HTTP_CODE (non-fatal)"
+          fi
