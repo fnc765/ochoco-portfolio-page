@@ -3,6 +3,9 @@ name: Refresh Today's Tweets
 # 毎日 JST 6:00〜23:00 の毎時00分に実行 (UTC 21:00〜14:00)
 # cron は UTC 基準なので JST-9h で設定
 on:
+  push:
+    branches:
+      - 'claude/auto-update-daily-tweets-*'
   schedule:
     # UTC 21:00 = JST 06:00
     # UTC 22:00 = JST 07:00
