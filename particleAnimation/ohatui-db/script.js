@@ -207,7 +207,7 @@
                             <span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>
                         </div>
                         ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
-                        ${t.tweet_id ? `<a href="https://x.com/i/web/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
+                        ${t.tweet_id ? `<a href="https://x.com/i/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
                     </div>
                 </div>
             `;
@@ -224,7 +224,7 @@
                             ${t.retweet_count ? `<span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>` : ""}
                         </div>
                         ${milestones[t.id] ? `<div class="modal-milestone">${milestones[t.id]}回目のおはつい！</div>` : ""}
-                        ${t.tweet_id ? `<a href="https://x.com/i/web/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
+                        ${t.tweet_id ? `<a href="https://x.com/i/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
                     </div>
                 </div>
             `;
@@ -679,7 +679,7 @@
 
         const modalThumb = getThumbnailUrl(t);
         body.innerHTML = `
-            ${modalThumb ? `<img src="${modalThumb}" alt="おはつい" class="modal-image">` : ''}
+            ${modalThumb ? `<img src="${modalThumb}" alt="おはつい" class="modal-image" style="cursor:zoom-in;" data-full-src="${modalThumb}">` : ''}
             <div class="modal-body-inner">
                 ${getTypeBadge(t.type)}
                 <p class="modal-text">${escapeHtml(t.text)}</p>
@@ -689,8 +689,15 @@
                     <span><i class="fas fa-retweet" aria-hidden="true"></i> ${t.retweet_count}</span>
                 </div>
                 ${ms ? `<div class="modal-milestone">${ms}回目のおはつい！</div>` : ""}
+                ${t.tweet_id ? `<a href="https://x.com/i/status/${t.tweet_id}" target="_blank" rel="noopener noreferrer" class="tweet-link"><i class="fab fa-x-twitter" aria-hidden="true"></i> 元のポストを見る</a>` : ""}
             </div>
         `;
+
+        // 画像クリックでライトボックス表示
+        const modalImg = body.querySelector(".modal-image");
+        if (modalImg) {
+            modalImg.addEventListener("click", () => openLightbox(modalImg.src));
+        }
 
         modal.style.display = "flex";
         document.body.style.overflow = "hidden";
@@ -702,6 +709,22 @@
             modal.style.display = "none";
             document.body.style.overflow = "";
         }
+    }
+
+    // ===================================
+    // ライトボックス（画像拡大表示）
+    // ===================================
+    function openLightbox(src) {
+        const lb = document.getElementById("image-lightbox");
+        const img = document.getElementById("lightbox-img");
+        if (!lb || !img) return;
+        img.src = src;
+        lb.style.display = "flex";
+    }
+
+    function closeLightbox() {
+        const lb = document.getElementById("image-lightbox");
+        if (lb) lb.style.display = "none";
     }
 
     // ===================================
@@ -769,8 +792,20 @@
         // モーダル
         document.getElementById("modal-close")?.addEventListener("click", closeModal);
         document.getElementById("modal-overlay")?.addEventListener("click", closeModal);
+
+        // ライトボックス
+        document.getElementById("lightbox-overlay")?.addEventListener("click", closeLightbox);
+        document.getElementById("lightbox-close")?.addEventListener("click", closeLightbox);
+
         document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") closeModal();
+            if (e.key === "Escape") {
+                const lb = document.getElementById("image-lightbox");
+                if (lb && lb.style.display === "flex") {
+                    closeLightbox();
+                } else {
+                    closeModal();
+                }
+            }
         });
     });
 
