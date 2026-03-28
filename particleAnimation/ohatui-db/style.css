@@ -69,18 +69,18 @@ body {
 }
 
 /* 行ごとに異なる速度・スタート位置（素数的比率で実質永久に非同期） */
-.tile-row:nth-child(1)  { --duration:  50s; --offset:   0s; }
-.tile-row:nth-child(2)  { --duration:  66s; --offset:  -8s; }
-.tile-row:nth-child(3)  { --duration:  82s; --offset: -15s; }
-.tile-row:nth-child(4)  { --duration: 100s; --offset: -22s; }
-.tile-row:nth-child(5)  { --duration:  74s; --offset: -12s; }
-.tile-row:nth-child(6)  { --duration:  58s; --offset:  -5s; }
-.tile-row:nth-child(7)  { --duration:  88s; --offset: -18s; }
-.tile-row:nth-child(8)  { --duration:  62s; --offset:  -9s; }
-.tile-row:nth-child(9)  { --duration:  94s; --offset: -25s; }
-.tile-row:nth-child(10) { --duration:  54s; --offset:  -3s; }
-.tile-row:nth-child(11) { --duration: 106s; --offset: -20s; }
-.tile-row:nth-child(12) { --duration:  46s; --offset:  -7s; }
+.tile-row:nth-child(1)  { --duration: 100s; --offset:   0s; }
+.tile-row:nth-child(2)  { --duration: 132s; --offset:  -8s; }
+.tile-row:nth-child(3)  { --duration: 164s; --offset: -15s; }
+.tile-row:nth-child(4)  { --duration: 200s; --offset: -22s; }
+.tile-row:nth-child(5)  { --duration: 148s; --offset: -12s; }
+.tile-row:nth-child(6)  { --duration: 116s; --offset:  -5s; }
+.tile-row:nth-child(7)  { --duration: 176s; --offset: -18s; }
+.tile-row:nth-child(8)  { --duration: 124s; --offset:  -9s; }
+.tile-row:nth-child(9)  { --duration: 188s; --offset: -25s; }
+.tile-row:nth-child(10) { --duration: 108s; --offset:  -3s; }
+.tile-row:nth-child(11) { --duration: 212s; --offset: -20s; }
+.tile-row:nth-child(12) { --duration:  92s; --offset:  -7s; }
 
 .tile-row-left {
     animation: scrollLeft var(--duration, 35s) linear var(--offset, 0s) infinite;
