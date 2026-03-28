@@ -651,11 +651,17 @@ body {
 }
 
 .heatmap-stat-like {
-    color: #f91880;
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .heatmap-stat-rt {
     color: rgba(255, 255, 255, 0.9);
+}
+
+.heatmap-cell.top {
+    outline: 2px solid #fff;
+    outline-offset: -2px;
+    z-index: 1;
 }
 
 .heatmap-cell.empty {

@@ -483,14 +483,15 @@
         const firstDay = new Date(heatmapYear, heatmapMonth, 1).getDay();
         const daysInMonth = new Date(heatmapYear, heatmapMonth + 1, 0).getDate();
 
-        // 月内の最大エンゲージメントを計算（色の正規化用）
+        // 月内の最大エンゲージメントを計算（色の正規化用・トップ日の特定）
         let maxEngagement = 0;
+        let topDay = -1;
         for (let d = 1; d <= daysInMonth; d++) {
             const key = `${heatmapYear}-${String(heatmapMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
             if (tweetsByDate[key]) {
                 const t = tweetsByDate[key][0];
                 const eng = (t.like_count || 0) + (t.retweet_count || 0);
-                if (eng > maxEngagement) maxEngagement = eng;
+                if (eng > maxEngagement) { maxEngagement = eng; topDay = d; }
             }
         }
 
@@ -525,8 +526,9 @@
                 ? `${d}日 - ${getTypeLabel(tweet.type)} ♥${tweet.like_count || 0} ↺${tweet.retweet_count || 0}`
                 : `${d}日 - なし`;
 
+            const isTop = hasTweet && d === topDay && maxEngagement > 0;
             html += `
-                <div class="heatmap-cell ${hasTweet ? "active" : ""}" ${hasTweet ? `data-tweet-id="${tweet.id}" ${cellStyle}` : ""}>
+                <div class="heatmap-cell ${hasTweet ? "active" : ""}${isTop ? " top" : ""}" ${hasTweet ? `data-tweet-id="${tweet.id}" ${cellStyle}` : ""}>
                     <span class="heatmap-tooltip">${tooltip}</span>
                     ${statsHtml}
                 </div>
