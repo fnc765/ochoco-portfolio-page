@@ -483,6 +483,17 @@
         const firstDay = new Date(heatmapYear, heatmapMonth, 1).getDay();
         const daysInMonth = new Date(heatmapYear, heatmapMonth + 1, 0).getDate();
 
+        // 月内の最大エンゲージメントを計算（色の正規化用）
+        let maxEngagement = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+            const key = `${heatmapYear}-${String(heatmapMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            if (tweetsByDate[key]) {
+                const t = tweetsByDate[key][0];
+                const eng = (t.like_count || 0) + (t.retweet_count || 0);
+                if (eng > maxEngagement) maxEngagement = eng;
+            }
+        }
+
         let html = dayHeaders.map(d => `<div class="heatmap-header">${d}</div>`).join("");
 
         // 空セル
@@ -495,13 +506,34 @@
             const key = `${heatmapYear}-${String(heatmapMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
             const hasTweet = !!tweetsByDate[key];
             const tweet = hasTweet ? tweetsByDate[key][0] : null;
+
+            let cellStyle = "";
+            let statsHtml = "";
+
+            if (hasTweet) {
+                const likes = tweet.like_count || 0;
+                const rts = tweet.retweet_count || 0;
+                const engagement = likes + rts;
+                const ratio = maxEngagement > 0 ? engagement / maxEngagement : 0;
+                const alpha = (0.2 + ratio * 0.8).toFixed(2);
+                cellStyle = `style="background: rgba(139, 195, 74, ${alpha});"`;
+
+                if (engagement > 0) {
+                    const parts = [];
+                    if (likes > 0) parts.push(`<span>♥${likes}</span>`);
+                    if (rts > 0) parts.push(`<span>↺${rts}</span>`);
+                    statsHtml = `<span class="heatmap-stats">${parts.join("")}</span>`;
+                }
+            }
+
             const tooltip = hasTweet
-                ? `${d}日 - ${getTypeLabel(tweet.type)}`
+                ? `${d}日 - ${getTypeLabel(tweet.type)} ♥${tweet.like_count || 0} ↺${tweet.retweet_count || 0}`
                 : `${d}日 - なし`;
 
             html += `
-                <div class="heatmap-cell ${hasTweet ? "active" : ""}" ${hasTweet ? `data-tweet-id="${tweet.id}"` : ""}>
+                <div class="heatmap-cell ${hasTweet ? "active" : ""}" ${hasTweet ? `data-tweet-id="${tweet.id}" ${cellStyle}` : ""}>
                     <span class="heatmap-tooltip">${tooltip}</span>
+                    ${statsHtml}
                 </div>
             `;
         }

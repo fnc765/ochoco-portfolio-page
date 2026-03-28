@@ -13,6 +13,10 @@ on:
       - 'particleAnimation/**'
       - 'ohatsui/functions/**'
       - 'ohatsui/test/**'
+      - 'ohatsui/index.html'
+      - 'ohatsui/script.js'
+      - 'ohatsui/style.css'
+      - 'ohatsui/mock-data.js'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
 
@@ -75,6 +79,12 @@ jobs:
           cp -r ohatsui/functions particleAnimation/functions
           echo "functions/ を particleAnimation にコピー完了"
           ls -la particleAnimation/functions/api/
+
+          cp ohatsui/index.html particleAnimation/ohatui-db/index.html
+          cp ohatsui/script.js particleAnimation/ohatui-db/script.js
+          cp ohatsui/style.css particleAnimation/ohatui-db/style.css
+          cp ohatsui/mock-data.js particleAnimation/ohatui-db/mock-data.js
+          echo "ohatui-db フロントエンドファイルを particleAnimation にコピー完了"
 
       - name: Setup D1 database and bindings
         run: |
