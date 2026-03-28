@@ -43,7 +43,7 @@ body {
 
 .tile-row {
     display: flex;
-    gap: 8px;
+    width: max-content; /* コンテンツ幅基準にすることで-50%が常に1セット分になる */
     margin-bottom: 8px;
     white-space: nowrap;
     will-change: transform;
@@ -55,6 +55,7 @@ body {
     object-fit: cover;
     border-radius: 8px;
     flex-shrink: 0;
+    margin-right: 8px; /* gap: 8px の代わり。末尾にも適用されて1スロット=158pxになる */
 }
 
 @keyframes scrollLeft {
@@ -1120,6 +1121,7 @@ body {
     .tile-row img {
         width: 120px;
         height: 120px;
+        margin-right: 8px;
     }
 }
 

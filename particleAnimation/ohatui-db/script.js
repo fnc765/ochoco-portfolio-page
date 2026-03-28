@@ -118,7 +118,7 @@
         if (images.length === 0) return;
 
         const tilesPerRow = 20;
-        const MAX_ROWS = 12;
+        const MAX_ROWS = 20;
         let prevRowCount = -1;
         let prevTileSize = -1;
 
