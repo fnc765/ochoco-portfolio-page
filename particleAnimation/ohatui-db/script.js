@@ -523,7 +523,7 @@
             }
 
             const tooltip = hasTweet
-                ? `${d}日 - ${getTypeLabel(tweet.type)} ♥${tweet.like_count || 0} ↺${tweet.retweet_count || 0}`
+                ? `${d}日 - ${getTypeLabel(tweet.type)} ♥${tweet.like_count || 0} <i class="fas fa-retweet" aria-hidden="true"></i>${tweet.retweet_count || 0}`
                 : `${d}日 - なし`;
 
             const isTop = hasTweet && d === topDay && maxEngagement > 0;

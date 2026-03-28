@@ -623,6 +623,7 @@ body {
 
 .heatmap-cell:hover {
     transform: scale(1.15);
+    z-index: 2;
 }
 
 .heatmap-cell.active {
