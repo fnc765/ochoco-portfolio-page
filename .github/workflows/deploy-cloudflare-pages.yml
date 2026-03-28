@@ -188,7 +188,7 @@ jobs:
           accountId: ${{ steps.cf-account.outputs.account_id }}
           wranglerVersion: "3.99.0"
           workingDirectory: particleAnimation
-          command: pages deploy --project-name=ochoco-portfolio --commit-dirty=true
+          command: pages deploy --project-name=ochoco-portfolio --commit-dirty=true --commit-hash=${{ github.sha }} --commit-message="deploy ${{ github.sha }}"
 
       - name: Post-deploy validation - fetch-tweet API
         continue-on-error: true
