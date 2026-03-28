@@ -517,7 +517,7 @@
                 const engagement = likes + rts;
                 const ratio = maxEngagement > 0 ? engagement / maxEngagement : 0;
                 const alpha = (0.2 + ratio * 0.8).toFixed(2);
-                cellStyle = `style="background: rgba(139, 195, 74, ${alpha});"`;
+                cellStyle = `style="background: rgba(220, 53, 69, ${alpha});"`;
 
                 statsHtml = `<span class="heatmap-stats"><span class="heatmap-stat-like"><i class="fas fa-heart" aria-hidden="true"></i>${likes}</span><span class="heatmap-stat-rt"><i class="fas fa-retweet" aria-hidden="true"></i>${rts}</span></span>`;
             }
