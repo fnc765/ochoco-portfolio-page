@@ -29,6 +29,16 @@ body {
     overflow: hidden;
     opacity: 0.15;
     filter: blur(2px);
+    mask-image: linear-gradient(
+        to right,
+        transparent 0%, black 8%,
+        black 92%, transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0%, black 8%,
+        black 92%, transparent 100%
+    );
 }
 
 .tile-row {
@@ -48,21 +58,35 @@ body {
 }
 
 @keyframes scrollLeft {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+    0%   { transform: translate3d(0, 0, 0); }
+    100% { transform: translate3d(-50%, 0, 0); }
 }
 
 @keyframes scrollRight {
-    0% { transform: translateX(-50%); }
-    100% { transform: translateX(0); }
+    0%   { transform: translate3d(-50%, 0, 0); }
+    100% { transform: translate3d(0, 0, 0); }
 }
 
+/* 行ごとに異なる速度・スタート位置（素数的比率で実質永久に非同期） */
+.tile-row:nth-child(1)  { --duration: 25s; --offset:   0s; }
+.tile-row:nth-child(2)  { --duration: 33s; --offset:  -8s; }
+.tile-row:nth-child(3)  { --duration: 41s; --offset: -15s; }
+.tile-row:nth-child(4)  { --duration: 50s; --offset: -22s; }
+.tile-row:nth-child(5)  { --duration: 37s; --offset: -12s; }
+.tile-row:nth-child(6)  { --duration: 29s; --offset:  -5s; }
+.tile-row:nth-child(7)  { --duration: 44s; --offset: -18s; }
+.tile-row:nth-child(8)  { --duration: 31s; --offset:  -9s; }
+.tile-row:nth-child(9)  { --duration: 47s; --offset: -25s; }
+.tile-row:nth-child(10) { --duration: 27s; --offset:  -3s; }
+.tile-row:nth-child(11) { --duration: 53s; --offset: -20s; }
+.tile-row:nth-child(12) { --duration: 23s; --offset:  -7s; }
+
 .tile-row-left {
-    animation: scrollLeft 60s linear infinite;
+    animation: scrollLeft var(--duration, 35s) linear var(--offset, 0s) infinite;
 }
 
 .tile-row-right {
-    animation: scrollRight 60s linear infinite;
+    animation: scrollRight var(--duration, 35s) linear var(--offset, 0s) infinite;
 }
 
 /* ===================================
