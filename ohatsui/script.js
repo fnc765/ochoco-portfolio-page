@@ -112,6 +112,7 @@
 
         const images = tweets
             .filter(t => t.image_url)
+            .slice(0, 20)
             .map(t => getThumbnailUrl(t));
 
         if (images.length === 0) return;
