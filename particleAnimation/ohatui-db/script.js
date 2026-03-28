@@ -518,12 +518,7 @@
                 const alpha = (0.2 + ratio * 0.8).toFixed(2);
                 cellStyle = `style="background: rgba(139, 195, 74, ${alpha});"`;
 
-                if (engagement > 0) {
-                    const parts = [];
-                    if (likes > 0) parts.push(`<span>♥${likes}</span>`);
-                    if (rts > 0) parts.push(`<span>↺${rts}</span>`);
-                    statsHtml = `<span class="heatmap-stats">${parts.join("")}</span>`;
-                }
+                statsHtml = `<span class="heatmap-stats"><span class="heatmap-stat-like"><i class="fas fa-heart" aria-hidden="true"></i>${likes}</span><span class="heatmap-stat-rt"><i class="fas fa-retweet" aria-hidden="true"></i>${rts}</span></span>`;
             }
 
             const tooltip = hasTweet

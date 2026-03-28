@@ -636,11 +636,26 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 0.05em;
     font-size: 20cqw;
     color: rgba(255, 255, 255, 0.95);
     pointer-events: none;
-    line-height: 1.3;
+    line-height: 1.2;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.heatmap-stats > span {
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+}
+
+.heatmap-stat-like {
+    color: #f91880;
+}
+
+.heatmap-stat-rt {
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .heatmap-cell.empty {
