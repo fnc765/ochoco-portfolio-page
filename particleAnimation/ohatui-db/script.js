@@ -145,12 +145,14 @@
                 const rowEl = document.createElement("div");
                 rowEl.className = `tile-row ${row % 2 === 0 ? "tile-row-left" : "tile-row-right"}`;
 
-                // 2セット分（無限ループ用）
+                // 行ごとにシャッフルした順序を生成
+                const rowImages = [...images].sort(() => Math.random() - 0.5);
+
+                // 2セット分（無限ループ用）- 同じ行内は同じ順序でシームレスにループ
                 for (let set = 0; set < 2; set++) {
                     for (let i = 0; i < tilesPerRow; i++) {
                         const img = document.createElement("img");
-                        const idx = (row * tilesPerRow + i) % images.length;
-                        img.src = images[idx];
+                        img.src = rowImages[i % rowImages.length];
                         img.alt = "";
                         img.loading = "lazy";
                         rowEl.appendChild(img);
