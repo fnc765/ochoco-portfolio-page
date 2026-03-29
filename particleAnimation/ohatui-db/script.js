@@ -591,6 +591,8 @@
             <p class="fun-tweet-text">${escapeHtml(t.text)}</p>
             <p class="fun-tweet-date">${formatDate(t.created_at)}</p>
         `;
+        container.style.cursor = "pointer";
+        container.onclick = () => openModal(t);
     }
 
     // ===================================
