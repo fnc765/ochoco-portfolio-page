@@ -34,7 +34,9 @@
             konchoco: "こんちょこ",
             konbanchoco: "こんばんちょこ"
         };
-        return `<span class="today-type-badge badge-${type}">${labels[type] || type}</span>`;
+        const label = labels[type] || '';
+        const safeType = labels[type] ? type : '';
+        return `<span class="today-type-badge badge-${safeType}">${label}</span>`;
     }
 
     function getTypeLabel(type) {
@@ -43,7 +45,7 @@
             konchoco: "こんちょこ",
             konbanchoco: "こんばんちょこ"
         };
-        return labels[type] || type;
+        return labels[type] || '';
     }
 
     // 日付のみ比較用

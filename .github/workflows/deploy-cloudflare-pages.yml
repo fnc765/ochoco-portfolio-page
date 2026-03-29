@@ -5,10 +5,6 @@ on:
     branches:
       - main
       - ohatui-db
-      - 'claude/deploy-cloudflare-pages-gIUW7'
-      - 'claude/check-tweet-endpoint-W6pxz'
-      - 'claude/add-modal-features-4dSqR'
-      - 'claude/auto-update-daily-tweets-p5JCY'
     paths:
       - 'particleAnimation/**'
       - 'ohatsui/functions/**'
@@ -24,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: write
 
     steps:
       - name: Checkout repository
@@ -42,7 +37,6 @@ jobs:
             exit 1
           fi
           echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
-          echo "Account ID: $ACCOUNT_ID"
 
       - name: Check / create Cloudflare Pages project
         run: |

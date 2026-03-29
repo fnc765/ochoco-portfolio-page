@@ -41,6 +41,30 @@
 
 const GREETING_PATTERN = /おはちょこ|こんちょこ|こんばんちょこ/u;
 
+/** 画像URLの許可ホスト一覧（SSRF防止） */
+const ALLOWED_IMAGE_HOSTS = new Set(['pbs.twimg.com', 'ton.twimg.com']);
+
+/** image_url が許可ホストの HTTPS URL かどうかを検証する */
+function isAllowedImageUrl(imageUrl) {
+    if (!imageUrl) return false;
+    try {
+        const url = new URL(imageUrl);
+        return url.protocol === 'https:' && ALLOWED_IMAGE_HOSTS.has(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+/** トークンと秘密をSHA-256でハッシュ化して定数時間比較（長さ漏洩防止） */
+async function timingSafeCompare(token, secret) {
+    const enc = new TextEncoder();
+    const [hashA, hashB] = await Promise.all([
+        crypto.subtle.digest('SHA-256', enc.encode(token)),
+        crypto.subtle.digest('SHA-256', enc.encode(secret)),
+    ]);
+    return crypto.subtle.timingSafeEqual(hashA, hashB);
+}
+
 /** FixTweet API (api.fxtwitter.com) からツイートデータを取得するヘルパー（APIキー不要） */
 async function fetchTweetFromFxTwitter(tweetUrl) {
     // tweet ID からクリーンな API URL を構築（クエリパラメータ混入を防止）
@@ -103,16 +127,18 @@ function extractTweetId(tweetUrl) {
 
 /** Twitter画像を取得してR2に small サイズ (680px幅) で保存（ベストエフォート） */
 async function cacheImageToR2(imagesBucket, tweetId, imageUrl) {
+    // SSRF防止: 許可ホスト以外はスキップ
+    if (!isAllowedImageUrl(imageUrl)) {
+        console.warn(`[collect] R2 cache skip: disallowed host for ${tweetId}: ${imageUrl}`);
+        return;
+    }
     try {
-        let fetchUrl = imageUrl;
-        try {
-            const url = new URL(imageUrl);
-            if (url.hostname === 'pbs.twimg.com') {
-                url.searchParams.set('format', 'jpg');
-                url.searchParams.set('name', 'small');
-                fetchUrl = url.toString();
-            }
-        } catch { /* URL パース失敗時はそのまま */ }
+        const url = new URL(imageUrl);
+        if (url.hostname === 'pbs.twimg.com') {
+            url.searchParams.set('format', 'jpg');
+            url.searchParams.set('name', 'small');
+        }
+        const fetchUrl = url.toString();
 
         const res = await fetch(fetchUrl, {
             headers: { 'User-Agent': 'bot' },
@@ -124,7 +150,9 @@ async function cacheImageToR2(imagesBucket, tweetId, imageUrl) {
         }
 
         const buffer = await res.arrayBuffer();
-        const contentType = res.headers.get('Content-Type') || 'image/jpeg';
+        // Content-Type は image/* のみ許可（汚染防止）
+        const rawCt = res.headers.get('Content-Type') || '';
+        const contentType = rawCt.startsWith('image/') ? rawCt : 'image/jpeg';
         await imagesBucket.put(`images/small/${tweetId}.jpg`, buffer, {
             httpMetadata: { contentType },
         });
@@ -144,11 +172,7 @@ export async function onRequestPost(context) {
     }
     const authHeader = request.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    const encoder = new TextEncoder();
-    const tokenBytes = encoder.encode(token);
-    const secretBytes = encoder.encode(secret);
-    const authorized = tokenBytes.byteLength === secretBytes.byteLength &&
-        crypto.subtle.timingSafeEqual(tokenBytes, secretBytes);
+    const authorized = await timingSafeCompare(token, secret);
     if (!authorized) {
         return Response.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -211,25 +235,28 @@ export async function onRequestPost(context) {
         createdAt = new Date().toISOString();
     }
 
+    // image_url は許可ホストのみ保存（SSRF防止）
+    const safeImageUrl = isAllowedImageUrl(image_url) ? image_url : null;
+
     try {
         await env.DB.prepare(
             'INSERT OR REPLACE INTO tweets' +
             ' (id, tweet_id, text, created_at, image_url, like_count, retweet_count, type)' +
             ' VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'
-        ).bind(tweetId, tweetId, text.trim(), createdAt, image_url ?? null,
+        ).bind(tweetId, tweetId, text.trim(), createdAt, safeImageUrl,
                like_count ?? 0, retweet_count ?? 0, detectType(text))
          .run();
 
         console.log(`[collect] 保存: ${tweetId} [${detectType(text)}] ${createdAt.slice(0, 10)}`);
 
         // R2 にサムネイルをキャッシュ（ベストエフォート、レスポンスをブロックしない）
-        if (image_url && env.IMAGES) {
-            context.waitUntil(cacheImageToR2(env.IMAGES, tweetId, image_url));
+        if (safeImageUrl && env.IMAGES) {
+            context.waitUntil(cacheImageToR2(env.IMAGES, tweetId, safeImageUrl));
         }
 
         return Response.json({ ok: true, id: tweetId, type: detectType(text) });
     } catch (err) {
         console.error('[collect] D1 error:', err);
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

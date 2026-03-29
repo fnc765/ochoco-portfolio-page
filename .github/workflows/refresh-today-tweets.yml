@@ -3,9 +3,6 @@ name: Refresh Today's Tweets
 # 毎日 JST 6:00〜23:00 の毎時00分に実行 (UTC 21:00〜14:00)
 # cron は UTC 基準なので JST-9h で設定
 on:
-  push:
-    branches:
-      - 'claude/auto-update-daily-tweets-*'
   schedule:
     # UTC 21:00 = JST 06:00
     # UTC 22:00 = JST 07:00
@@ -19,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call /api/refresh-today
+        env:
+          COLLECT_SECRET: ${{ secrets.COLLECT_SECRET }}
         run: |
           SITE_URL="https://ochoco-portfolio.pages.dev"
           API_URL="$SITE_URL/api/refresh-today"
@@ -26,7 +25,9 @@ jobs:
           echo "=== Calling $API_URL ==="
           echo "Time (UTC): $(date -u)"
 
-          HTTP_CODE=$(curl -s -o /tmp/refresh_response.txt -w "%{http_code}" "$API_URL")
+          HTTP_CODE=$(curl -s -o /tmp/refresh_response.txt -w "%{http_code}" \
+            -H "Authorization: Bearer ${COLLECT_SECRET}" \
+            "$API_URL")
           RESPONSE=$(cat /tmp/refresh_response.txt)
 
           echo "HTTP Status: $HTTP_CODE"
