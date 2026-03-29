@@ -1243,6 +1243,11 @@ body {
         display: none;
     }
 
+    .search-date,
+    .search-select {
+        width: 100%;
+    }
+
     .onthisday-grid {
         grid-template-columns: 1fr;
     }
