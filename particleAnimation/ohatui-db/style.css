@@ -857,8 +857,18 @@ body {
     transition: border-color 0.3s ease;
 }
 
-.search-date {
-    color-scheme: dark;
+.search-date::-webkit-date-and-time-value {
+    color: #fff;
+    min-height: 1.2em;
+}
+
+.search-date::-webkit-datetime-edit,
+.search-date::-webkit-datetime-edit-fields-wrapper,
+.search-date::-webkit-datetime-edit-year-field,
+.search-date::-webkit-datetime-edit-month-field,
+.search-date::-webkit-datetime-edit-day-field,
+.search-date::-webkit-datetime-edit-text {
+    color: #fff;
 }
 
 .search-date::-webkit-calendar-picker-indicator {
