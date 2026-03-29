@@ -25,18 +25,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get Cloudflare Account ID
+      - name: Set Cloudflare Account ID
         id: cf-account
-        run: |
-          ACCOUNT_ID=$(curl -sf \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts" \
-            | jq -r '.result[0].id')
-          if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "null" ]; then
-            echo "Failed to retrieve Cloudflare Account ID"
-            exit 1
-          fi
-          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+        run: echo "account_id=${{ vars.CF_ACCOUNT_ID }}" >> "$GITHUB_OUTPUT"
 
       - name: Check / create Cloudflare Pages project
         run: |
