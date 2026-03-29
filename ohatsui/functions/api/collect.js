@@ -213,6 +213,16 @@ export async function onRequestPost(context) {
         retweet_count = retweet_count ?? fetched.retweet_count;
     }
 
+    // like_count / retweet_count が未指定の場合、FixTweet から取得（ベストエフォート）
+    // text が提供済みでエンゲージメントのみ欠落するケース（admin 手動登録など）に対応
+    if (like_count == null || retweet_count == null) {
+        const fetched = await fetchTweetFromFxTwitter(tweet_url);
+        if (fetched.ok) {
+            like_count    = like_count    ?? fetched.like_count;
+            retweet_count = retweet_count ?? fetched.retweet_count;
+        }
+    }
+
     if (!text) {
         return new Response('Missing required field: text', { status: 400 });
     }
