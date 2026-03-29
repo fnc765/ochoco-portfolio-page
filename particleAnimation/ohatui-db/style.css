@@ -852,10 +852,39 @@ body {
     transition: border-color 0.3s ease;
 }
 
+.search-date {
+    color-scheme: dark;
+}
+
+.search-date::-webkit-calendar-picker-indicator {
+    filter: invert(1) sepia(1) saturate(3) hue-rotate(310deg);
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.search-date::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+.search-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.4)'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    cursor: pointer;
+}
+
+.search-select option {
+    background: #1e1e1e;
+    color: #fff;
+}
+
 .search-date:focus,
 .search-select:focus {
     outline: none;
-    border-color: rgba(255, 255, 255, 0.4);
+    border-color: rgba(220, 53, 69, 0.6);
 }
 
 .search-date-sep {
@@ -986,6 +1015,25 @@ body {
     width: 90%;
     max-height: 85vh;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(220, 53, 69, 0.5) transparent;
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: rgba(220, 53, 69, 0.5);
+    border-radius: 2px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(220, 53, 69, 0.8);
 }
 
 .modal-close {
