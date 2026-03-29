@@ -34,7 +34,9 @@
             konchoco: "こんちょこ",
             konbanchoco: "こんばんちょこ"
         };
-        return `<span class="today-type-badge badge-${type}">${labels[type] || type}</span>`;
+        const label = labels[type] || '';
+        const safeType = labels[type] ? type : '';
+        return `<span class="today-type-badge badge-${safeType}">${label}</span>`;
     }
 
     function getTypeLabel(type) {
@@ -43,7 +45,7 @@
             konchoco: "こんちょこ",
             konbanchoco: "こんばんちょこ"
         };
-        return labels[type] || type;
+        return labels[type] || '';
     }
 
     // 日付のみ比較用
@@ -674,6 +676,37 @@
         if (loadBtn) loadBtn.style.display = "none";
     }
 
+    function initMobileDateOverlay() {
+        if (window.innerWidth > 600) return;
+
+        document.querySelectorAll('.search-date').forEach(dateInput => {
+            if (dateInput.dataset.overlayInit) return;
+            dateInput.dataset.overlayInit = 'true';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'date-wrapper';
+
+            const textDisplay = document.createElement('input');
+            textDisplay.type = 'text';
+            textDisplay.readOnly = true;
+            textDisplay.placeholder = dateInput.getAttribute('aria-label') || '日付を選択';
+            textDisplay.className = 'search-date-text';
+
+            dateInput.parentNode.insertBefore(wrapper, dateInput);
+            wrapper.appendChild(textDisplay);
+            wrapper.appendChild(dateInput);
+
+            dateInput.addEventListener('change', () => {
+                if (dateInput.value) {
+                    const [y, m, d] = dateInput.value.split('-');
+                    textDisplay.value = `${y}年${m}月${d}日`;
+                } else {
+                    textDisplay.value = '';
+                }
+            });
+        });
+    }
+
     function initInfiniteScroll() {
         const sentinel = document.getElementById("scroll-sentinel");
         if (!sentinel) return;
@@ -813,6 +846,7 @@
         // ギャラリー
         renderGallery(false);
         initInfiniteScroll();
+        initMobileDateOverlay();
 
         // イベントリスナー
         document.getElementById("random-btn")?.addEventListener("click", renderRandomTweet);

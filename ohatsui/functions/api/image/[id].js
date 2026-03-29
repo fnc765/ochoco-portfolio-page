@@ -11,20 +11,32 @@
 
 const R2_KEY_PREFIX = 'images/small/';
 
+/** 画像URLの許可ホスト一覧（SSRF防止） */
+const ALLOWED_IMAGE_HOSTS = new Set(['pbs.twimg.com', 'ton.twimg.com']);
+
+/** image_url が許可ホストの HTTPS URL かどうかを検証する */
+function isAllowedImageUrl(imageUrl) {
+    if (!imageUrl) return false;
+    try {
+        const url = new URL(imageUrl);
+        return url.protocol === 'https:' && ALLOWED_IMAGE_HOSTS.has(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
 /** Twitter画像URLを small サイズ (680px幅) に変換 */
 function toSmallImageUrl(imageUrl) {
-    if (!imageUrl) return null;
     try {
         const url = new URL(imageUrl);
         if (url.hostname === 'pbs.twimg.com') {
             url.searchParams.set('format', 'jpg');
             url.searchParams.set('name', 'small');
-            return url.toString();
         }
+        return url.toString();
     } catch {
-        // URL パース失敗時はそのまま返す
+        return null;
     }
-    return imageUrl;
 }
 
 /** タイプ別プレースホルダーSVG を生成 */
@@ -55,11 +67,15 @@ export async function onRequestGet({ params, env }) {
     if (env.IMAGES) {
         const object = await env.IMAGES.get(r2Key);
         if (object) {
+            // Content-Type は image/* のみ許可（汚染コンテンツ配信防止）
+            const rawCt = object.httpMetadata?.contentType || '';
+            const contentType = rawCt.startsWith('image/') ? rawCt : 'image/jpeg';
             return new Response(object.body, {
                 headers: {
-                    'Content-Type': object.httpMetadata?.contentType || 'image/jpeg',
+                    'Content-Type': contentType,
                     'Cache-Control': 'public, max-age=86400',
                     'Access-Control-Allow-Origin': '*',
+                    'X-Content-Type-Options': 'nosniff',
                 },
             });
         }
@@ -82,8 +98,15 @@ export async function onRequestGet({ params, env }) {
         return placeholderResponse(row?.type || 'ohachoco');
     }
 
-    // 3. Twitter から画像を取得
+    // 3. Twitter から画像を取得（SSRF防止: 許可ホストのみ）
+    if (!isAllowedImageUrl(row.image_url)) {
+        console.warn(`[image] disallowed image_url for ${tweetId}: ${row.image_url}`);
+        return placeholderResponse(row.type);
+    }
     const smallUrl = toSmallImageUrl(row.image_url);
+    if (!smallUrl) {
+        return placeholderResponse(row.type);
+    }
     let imageRes;
     try {
         imageRes = await fetch(smallUrl, {
@@ -101,7 +124,9 @@ export async function onRequestGet({ params, env }) {
 
     // 4. R2 に保存（ベストエフォート）
     const imageBuffer = await imageRes.arrayBuffer();
-    const contentType = imageRes.headers.get('Content-Type') || 'image/jpeg';
+    // Content-Type は image/* のみ許可（汚染防止）
+    const rawCt = imageRes.headers.get('Content-Type') || '';
+    const contentType = rawCt.startsWith('image/') ? rawCt : 'image/jpeg';
 
     if (env.IMAGES) {
         try {
@@ -120,6 +145,7 @@ export async function onRequestGet({ params, env }) {
             'Content-Type': contentType,
             'Cache-Control': 'public, max-age=86400',
             'Access-Control-Allow-Origin': '*',
+            'X-Content-Type-Options': 'nosniff',
         },
     });
 }
@@ -131,6 +157,7 @@ function placeholderResponse(type) {
             'Content-Type': 'image/svg+xml',
             'Cache-Control': 'public, max-age=3600',
             'Access-Control-Allow-Origin': '*',
+            'X-Content-Type-Options': 'nosniff',
         },
     });
 }

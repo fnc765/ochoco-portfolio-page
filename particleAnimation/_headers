@@ -1,0 +1,14 @@
+# Cloudflare Pages セキュリティヘッダー設定
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+# サイト全体
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# 管理パネル: クリックジャッキング完全禁止
+/ohatui-db/admin/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'

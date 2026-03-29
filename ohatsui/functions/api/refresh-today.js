@@ -3,7 +3,7 @@
  * 今日のおはついツイートの最新エンゲージメント (like_count, retweet_count) を
  * FixTweet API から再取得して D1 を更新し、更新後のデータを返す。
  *
- * 認証不要（読み取り＋エンゲージメント更新のみ）
+ * 認証: COLLECT_SECRET による Bearer トークン認証
  * GitHub Actions cron から1時間ごとに呼び出される想定。
  */
 
@@ -29,7 +29,28 @@ async function fetchEngagement(tweetId) {
     }
 }
 
-export async function onRequestGet({ env }) {
+/** トークンと秘密をSHA-256でハッシュ化して定数時間比較（長さ漏洩防止） */
+async function timingSafeCompare(token, secret) {
+    const enc = new TextEncoder();
+    const [hashA, hashB] = await Promise.all([
+        crypto.subtle.digest('SHA-256', enc.encode(token)),
+        crypto.subtle.digest('SHA-256', enc.encode(secret)),
+    ]);
+    return crypto.subtle.timingSafeEqual(hashA, hashB);
+}
+
+export async function onRequestGet({ request, env }) {
+    // 認証チェック: COLLECT_SECRET による Bearer トークン認証
+    const secret = env.COLLECT_SECRET;
+    if (!secret) {
+        return Response.json({ error: 'COLLECT_SECRET not configured' }, { status: 503 });
+    }
+    const authHeader = request.headers.get('Authorization') ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!(await timingSafeCompare(token, secret))) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!env.DB) {
         return Response.json({ error: 'DB not configured' }, { status: 503 });
     }
@@ -87,6 +108,6 @@ export async function onRequestGet({ env }) {
         });
     } catch (err) {
         console.error('[refresh-today] error:', err);
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

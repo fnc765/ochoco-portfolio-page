@@ -27,6 +27,6 @@ export async function onRequestGet({ env }) {
         });
     } catch (err) {
         console.error('D1 query error:', err);
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
