@@ -22,6 +22,10 @@
     .err { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
     #preview-img { display: none; max-width: 100%; border-radius: 8px; margin-bottom: 14px; }
+    .sonota-wrap { margin-bottom: 14px; }
+    .sonota-check-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .95rem; user-select: none; }
+    .sonota-check-label input[type=checkbox] { width: auto; margin: 0; accent-color: #e67e00; }
+    #sonota-warning { display: none; margin-top: 8px; padding: 10px 12px; background: #fff3cd; color: #856404; border: 1px solid #ffc107; border-radius: 6px; font-size: .85rem; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -44,6 +48,17 @@
 
   <label>投稿日時 <span style="color:#888">（省略すると現在時刻）</span></label>
   <input type="datetime-local" id="created_at">
+
+  <div class="sonota-wrap">
+    <label class="sonota-check-label">
+      <input type="checkbox" id="force-sonota" onchange="onSonotaChange()">
+      その他として登録する（挨拶パターン外のツイート）
+    </label>
+    <div id="sonota-warning">
+      ⚠️ 通常の挨拶パターン（おはちょこ / こんちょこ / こんばんちょこ）に一致しないツイートを「その他」として登録します。<br>
+      新年挨拶・特別投稿など、意図したツイートのみ登録してください。
+    </div>
+  </div>
 
   <button onclick="submit()">登録する</button>
 
@@ -116,12 +131,18 @@
       }
     }
 
+    function onSonotaChange() {
+      const checked = document.getElementById('force-sonota').checked;
+      document.getElementById('sonota-warning').style.display = checked ? 'block' : 'none';
+    }
+
     async function submit() {
       const token    = document.getElementById('token').value.trim();
       const tweetUrl = document.getElementById('tweet_url').value.trim();
       const text     = document.getElementById('text').value.trim();
       const dtVal    = document.getElementById('created_at').value;
       const imageUrl = document.getElementById('image_url').value.trim();
+      const isSonota = document.getElementById('force-sonota').checked;
 
       if (!tweetUrl) {
         showResult('ツイート URL は必須です', false);
@@ -132,6 +153,7 @@
       if (text)     body.text      = text;
       if (dtVal)    body.created_at = new Date(dtVal).toISOString();
       if (imageUrl) body.image_url  = imageUrl;
+      if (isSonota) body.force_type = 'sonota';
 
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;

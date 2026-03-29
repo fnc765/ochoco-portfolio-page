@@ -188,7 +188,8 @@ export async function onRequestPost(context) {
         return new Response('Invalid JSON', { status: 400 });
     }
 
-    let { text, tweet_url, created_at, image_url, like_count, retweet_count } = body ?? {};
+    let { text, tweet_url, created_at, image_url, like_count, retweet_count, force_type } = body ?? {};
+    const isSonota = force_type === 'sonota';
 
     if (!tweet_url) {
         return new Response('Missing required field: tweet_url', { status: 400 });
@@ -212,12 +213,23 @@ export async function onRequestPost(context) {
         retweet_count = retweet_count ?? fetched.retweet_count;
     }
 
+    // like_count / retweet_count が未指定の場合、FixTweet から取得（ベストエフォート）
+    // text が提供済みでエンゲージメントのみ欠落するケース（admin 手動登録など）に対応
+    if (like_count == null || retweet_count == null) {
+        const fetched = await fetchTweetFromFxTwitter(tweet_url);
+        if (fetched.ok) {
+            like_count    = like_count    ?? fetched.like_count;
+            retweet_count = retweet_count ?? fetched.retweet_count;
+        }
+    }
+
     if (!text) {
         return new Response('Missing required field: text', { status: 400 });
     }
 
     // 挨拶ツイート（おはちょこ/こんちょこ/こんばんちょこ）以外は登録拒否
-    if (!GREETING_PATTERN.test(text)) {
+    // force_type === 'sonota' の場合のみスキップ（/admin から明示的に指定された場合のみ）
+    if (!isSonota && !GREETING_PATTERN.test(text)) {
         return Response.json(
             { error: 'Not a greeting tweet', detail: 'Text must contain おはちょこ, こんちょこ, or こんばんちょこ' },
             { status: 400 },
@@ -239,22 +251,24 @@ export async function onRequestPost(context) {
     const safeImageUrl = isAllowedImageUrl(image_url) ? image_url : null;
 
     try {
+        const type = isSonota ? 'sonota' : detectType(text);
+
         await env.DB.prepare(
             'INSERT OR REPLACE INTO tweets' +
             ' (id, tweet_id, text, created_at, image_url, like_count, retweet_count, type)' +
             ' VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'
         ).bind(tweetId, tweetId, text.trim(), createdAt, safeImageUrl,
-               like_count ?? 0, retweet_count ?? 0, detectType(text))
+               like_count ?? 0, retweet_count ?? 0, type)
          .run();
 
-        console.log(`[collect] 保存: ${tweetId} [${detectType(text)}] ${createdAt.slice(0, 10)}`);
+        console.log(`[collect] 保存: ${tweetId} [${type}] ${createdAt.slice(0, 10)}`);
 
         // R2 にサムネイルをキャッシュ（ベストエフォート、レスポンスをブロックしない）
         if (safeImageUrl && env.IMAGES) {
             context.waitUntil(cacheImageToR2(env.IMAGES, tweetId, safeImageUrl));
         }
 
-        return Response.json({ ok: true, id: tweetId, type: detectType(text) });
+        return Response.json({ ok: true, id: tweetId, type });
     } catch (err) {
         console.error('[collect] D1 error:', err);
         return Response.json({ error: 'Internal server error' }, { status: 500 });

@@ -287,6 +287,7 @@ body {
 .badge-ohachoco { background: rgba(220, 53, 69, 0.25); color: #e05c6e; }
 .badge-konchoco { background: rgba(255, 152, 0, 0.25); color: #ff9800; }
 .badge-konbanchoco { background: rgba(255, 87, 34, 0.25); color: #ff5722; }
+.badge-sonota { background: rgba(100, 116, 139, 0.25); color: #94a3b8; }
 
 /* テキストのみのカード */
 .today-text-card {
@@ -486,6 +487,7 @@ body {
 .type-bar-fill.ohachoco { background: rgba(220, 53, 69, 0.7); }
 .type-bar-fill.konchoco { background: rgba(255, 152, 0, 0.7); }
 .type-bar-fill.konbanchoco { background: rgba(255, 87, 34, 0.7); }
+.type-bar-fill.sonota { background: rgba(100, 116, 139, 0.7); }
 
 /* プログレスバー */
 .progress-container {

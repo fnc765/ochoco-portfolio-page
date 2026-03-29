@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS tweets (
     like_count   INTEGER NOT NULL DEFAULT 0,
     retweet_count INTEGER NOT NULL DEFAULT 0,
     type         TEXT NOT NULL DEFAULT 'ohachoco'
-                 CHECK(type IN ('ohachoco', 'konchoco', 'konbanchoco'))
+                 CHECK(type IN ('ohachoco', 'konchoco', 'konbanchoco', 'sonota'))
 );
 
 -- 日付順クエリ用インデックス

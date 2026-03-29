@@ -32,7 +32,8 @@
         const labels = {
             ohachoco: "おはちょこ",
             konchoco: "こんちょこ",
-            konbanchoco: "こんばんちょこ"
+            konbanchoco: "こんばんちょこ",
+            sonota: "その他"
         };
         const label = labels[type] || '';
         const safeType = labels[type] ? type : '';
@@ -43,7 +44,8 @@
         const labels = {
             ohachoco: "おはちょこ",
             konchoco: "こんちょこ",
-            konbanchoco: "こんばんちょこ"
+            konbanchoco: "こんばんちょこ",
+            sonota: "その他"
         };
         return labels[type] || '';
     }
@@ -368,14 +370,15 @@
         const container = document.getElementById("type-bars");
         if (!container) return;
 
-        const counts = { ohachoco: 0, konchoco: 0, konbanchoco: 0 };
+        const counts = { ohachoco: 0, konchoco: 0, konbanchoco: 0, sonota: 0 };
         tweets.forEach(t => { if (counts[t.type] !== undefined) counts[t.type]++; });
         const total = tweets.length || 1;
 
         const types = [
             { key: "ohachoco", label: "おはちょこ", color: "ohachoco" },
             { key: "konchoco", label: "こんちょこ", color: "konchoco" },
-            { key: "konbanchoco", label: "こんばんちょこ", color: "konbanchoco" }
+            { key: "konbanchoco", label: "こんばんちょこ", color: "konbanchoco" },
+            { key: "sonota", label: "その他", color: "sonota" }
         ];
 
         container.innerHTML = types.map(t => {
