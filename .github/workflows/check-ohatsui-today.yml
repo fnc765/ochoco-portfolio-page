@@ -1,0 +1,130 @@
+name: Check Ohatsui Today
+
+# 毎日 JST 11:00 (UTC 2:00) に今日のおはつい登録状況をチェック
+# 未登録の場合は Discord に通知を送信する
+on:
+  schedule:
+    - cron: '0 2 * * *'  # UTC 2:00 = JST 11:00
+  workflow_dispatch:      # 手動テスト用
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # ジョブレベルで定義 → if: 条件から env.DISCORD_WEBHOOK_URL として参照可能
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      # ── Step 1: API 呼び出し ──────────────────────────────────────
+      - name: Call /api/check-today
+        id: check
+        env:
+          COLLECT_SECRET: ${{ secrets.COLLECT_SECRET }}
+        run: |
+          SITE_URL="https://ochoco-portfolio.pages.dev"
+          API_URL="$SITE_URL/api/check-today"
+
+          echo "=== Calling $API_URL ==="
+          echo "Time (UTC): $(date -u)"
+          echo "Time (JST): $(TZ=Asia/Tokyo date)"
+
+          # --retry: ネットワーク瞬断対策（最大3回リトライ）
+          # -w '%{http_code}': HTTPステータスコードを取得
+          # -o /tmp/response.json: レスポンスボディを保存
+          HTTP_CODE=$(curl -sS --retry 3 --retry-delay 5 --retry-max-time 30 \
+            -w '%{http_code}' -o /tmp/response.json \
+            -H "Authorization: Bearer ${COLLECT_SECRET}" "$API_URL")
+          RESPONSE=$(cat /tmp/response.json)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response:"
+          echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
+
+          # HTTP エラーチェック: 200 以外は異常とみなし、通知を抑制する
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::API returned HTTP $HTTP_CODE (expected 200)"
+            echo "found=error" >> "$GITHUB_OUTPUT"
+            echo "date=" >> "$GITHUB_OUTPUT"
+            echo "tweet_count=0" >> "$GITHUB_OUTPUT"
+            echo "missing=" >> "$GITHUB_OUTPUT"
+            echo "types_found=" >> "$GITHUB_OUTPUT"
+            echo "error=http_${HTTP_CODE}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 各フィールドを GitHub Actions outputs に格納
+          FOUND=$(echo "$RESPONSE" | jq -r '.found // "false"')
+          DATE=$(echo "$RESPONSE" | jq -r '.date // ""')
+          TWEET_COUNT=$(echo "$RESPONSE" | jq -r '.tweet_count // "0"')
+          MISSING=$(echo "$RESPONSE" | jq -r '.types_missing | join(", ") // ""')
+          TYPES_FOUND=$(echo "$RESPONSE" | jq -r '.types_found | join(", ") // "（なし）"')
+
+          echo "found=$FOUND" >> "$GITHUB_OUTPUT"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          echo "tweet_count=$TWEET_COUNT" >> "$GITHUB_OUTPUT"
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          echo "types_found=$TYPES_FOUND" >> "$GITHUB_OUTPUT"
+
+          if [ "$FOUND" = "true" ]; then
+            echo ""
+            echo "✅ 登録済み: $TWEET_COUNT 件 (${TYPES_FOUND})"
+          else
+            echo ""
+            echo "❌ 未登録: 今日のおはついはまだありません"
+          fi
+
+      # ── Step 2: Discord 通知（未登録時のみ） ──────────────────────
+      # found == 'false' の時のみ通知（'error' 時は API 障害のため非通知）
+      - name: Notify Discord
+        if: steps.check.outputs.found == 'false' && env.DISCORD_WEBHOOK_URL != ''
+        run: |
+          echo "=== Sending Discord notification ==="
+
+          PAYLOAD=$(jq -n \
+            --arg content "【おはつい通知】${{ steps.check.outputs.date }} のおはついがまだ登録されていません！" \
+            --arg missing "${{ steps.check.outputs.missing }}" \
+            --arg date "${{ steps.check.outputs.date }}" \
+            --arg count "${{ steps.check.outputs.tweet_count }}" \
+            '{
+              content: $content,
+              embeds: [{
+                title: "⚠️ おはつい未登録",
+                description: "未登録タイプ: \($missing)",
+                color: 16711680,
+                fields: [
+                  { name: "日付", value: $date, inline: true },
+                  { name: "登録数", value: $count, inline: true }
+                ],
+                footer: { text: "登録する: https://ochoco-portfolio.pages.dev/ohatsui-db/admin/" }
+              }]
+            }')
+
+          curl -sS -X POST \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
+
+          echo ""
+          echo "Discord 通知送信完了"
+
+      # ── Step 3: サマリ出力 ──────────────────────────────────────
+      - name: Summary
+        if: always()
+        run: |
+          echo "=== 実行サマリ ==="
+          echo "日付:     ${{ steps.check.outputs.date }}"
+          echo "登録数:   ${{ steps.check.outputs.tweet_count }}"
+
+          STATUS="${{ steps.check.outputs.found }}"
+          case "$STATUS" in
+            true)
+              echo "登録状況: ✅ 登録済み"
+              echo "登録タイプ: ${{ steps.check.outputs.types_found }}"
+              ;;
+            false)
+              echo "登録状況: ❌ 未登録"
+              echo "未登録タイプ: ${{ steps.check.outputs.missing }}"
+              ;;
+            error)
+              echo "登録状況: ⚠️ API エラー（HTTP ${{ steps.check.outputs.error }}）"
+              ;;
+          esac
