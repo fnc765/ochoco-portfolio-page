@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/choco/Documents/programming/web/ochoco-portfolio-page -type f -name *calendar* -o -name *ohatui* -o -name *おはつい*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:www.infoq.com)",
+      "WebFetch(domain:visualizing.jp)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:www.jqueryscript.net)",
+      "WebFetch(domain:cal-heatmap.com)",
+      "WebFetch(domain:docs.gitlab.com)",
+      "WebFetch(domain:documentation.bloomreach.com)",
+      "Bash(grep -r \"scrollbar\\\\|overflow\\\\|modal\\\\|lightbox\\\\|image-modal\" /c/Users/choco/Documents/programming/web/ochoco-portfolio-page/archive/ --include=*.css -l)",
+      "Bash(grep:*)",
+      "Bash(git:*)",
+      "Bash(ls -la C:/Users/choco/Documents/programming/web/ochoco-portfolio-page/*.*)",
+      "Bash(find C:/Users/choco/Documents/programming/web/ochoco-portfolio-page -type f -not -path */node_modules/* -not -path */.venv/* -not -path */.git/* -not -path */archive/* -not -path */.claude/*)",
+      "Bash(find C:/Users/choco/Documents/programming/web/ochoco-portfolio-page/particleAnimation -name *.html)",
+      "Bash(find C:/Users/choco/Documents/programming/web/ochoco-portfolio-page/particleAnimation -name admin*)",
+      "Bash(find /c/Users/choco/Documents/programming/web/ochoco-portfolio-page -name *.html -o -name *.svelte -o -name *.vue)",
+      "Bash(curl -s \"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css\")",
+      "Bash(openssl dgst:*)",
+      "Bash(openssl base64:*)",
+      "WebFetch(domain:http-shortcuts.rmy.ch)",
+      "WebFetch(domain:www.blog.brightcoding.dev)",
+      "WebFetch(domain:blog.kastanis.gr)"
+    ]
+  }
+}
