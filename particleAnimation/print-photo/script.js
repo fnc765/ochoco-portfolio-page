@@ -19,6 +19,17 @@ import {
 
 import { renderFrame } from './frame-render.js';
 
+import {
+    getCurrentPosition,
+    reverseGeocode,
+} from './location.js';
+
+import {
+    saveThumbnail,
+    getAllThumbnails,
+    deleteThumbnail,
+} from './storage.js';
+
 // =====================================
 // DOM 要素
 // =====================================
@@ -101,6 +112,7 @@ function init() {
 
     inputDate.value = getTodayStr();
     restoreFormState();
+    restoreThumbnails();
     bindEvents();
 }
 
@@ -160,6 +172,9 @@ function bindEvents() {
     document.getElementById('btn-save-png').addEventListener('click', () => handleActionWithWarning('save'));
     document.getElementById('btn-share').addEventListener('click', () => handleActionWithWarning('share'));
     document.getElementById('btn-copy').addEventListener('click', () => handleActionWithWarning('copy'));
+
+    // 位置情報取得
+    document.getElementById('btn-get-location').addEventListener('click', handleGetLocation);
 }
 
 // =====================================
@@ -231,6 +246,14 @@ async function handleFileSelect(e) {
         try {
             originalImageCanvas = await loadImageToCanvas(selectedImageDataUrl);
             await renderPreview();
+            // サムネイル保存
+            try {
+                const blob = await (await fetch(selectedImageDataUrl)).blob();
+                await saveThumbnail(blob);
+                await restoreThumbnails();
+            } catch (e) {
+                console.warn('Thumbnail save failed:', e);
+            }
         } catch (err) {
             console.error('Image load failed:', err);
             showToast('画像の読み込みに失敗しました');
@@ -717,6 +740,113 @@ function showToast(message) {
     toast.textContent = message;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// =====================================
+// 位置情報取得
+// =====================================
+async function handleGetLocation() {
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        showToast('位置情報を使うにはHTTPS接続が必要です');
+        return;
+    }
+
+    const suggestionsEl = document.getElementById('location-suggestions');
+    suggestionsEl.innerHTML = '<div class="location-suggestion-item">読み込み中...</div>';
+    suggestionsEl.classList.add('active');
+
+    try {
+        const pos = await getCurrentPosition();
+        const results = await reverseGeocode(pos.lat, pos.lon);
+        renderLocationSuggestions(results);
+    } catch (err) {
+        console.error('Location error:', err);
+        if (err.code === 1) {
+            showToast('位置情報の取得が許可されていません');
+        } else {
+            showToast('位置情報の取得に失敗しました');
+        }
+        suggestionsEl.classList.remove('active');
+    }
+}
+
+function renderLocationSuggestions(results) {
+    const el = document.getElementById('location-suggestions');
+    if (!results || results.length === 0) {
+        el.innerHTML = '<div class="location-suggestion-item">候補が見つかりませんでした</div>';
+        el.classList.add('active');
+        return;
+    }
+
+    el.innerHTML = results.map(r =>
+        `<div class="location-suggestion-item" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</div>`
+    ).join('');
+    el.classList.add('active');
+
+    el.querySelectorAll('.location-suggestion-item').forEach(item => {
+        item.addEventListener('click', () => {
+            inputLocation.value = item.dataset.name;
+            saveFormState();
+            el.classList.remove('active');
+        });
+    });
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// =====================================
+// サムネイル管理
+// =====================================
+async function restoreThumbnails() {
+    try {
+        const thumbs = await getAllThumbnails();
+        renderThumbnails(thumbs);
+    } catch (err) {
+        console.warn('Failed to restore thumbnails:', err);
+    }
+}
+
+function renderThumbnails(thumbs) {
+    const grid = document.getElementById('thumbnail-grid');
+    if (!thumbs || thumbs.length === 0) {
+        grid.innerHTML = '<p class="empty-text" data-testid="thumbnail-empty">まだ履歴がありません</p>';
+        return;
+    }
+
+    grid.innerHTML = thumbs.map(t => {
+        const url = URL.createObjectURL(t.blob);
+        return `
+            <div class="thumbnail-item" data-id="${t.id}">
+                <img src="${url}" alt="履歴画像" loading="lazy">
+                <button class="thumbnail-delete" data-id="${t.id}" aria-label="削除">×</button>
+            </div>
+        `;
+    }).join('');
+
+    // 削除ボタン
+    grid.querySelectorAll('.thumbnail-delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            try {
+                await deleteThumbnail(id);
+                await restoreThumbnails();
+            } catch (err) {
+                console.error('Delete thumbnail failed:', err);
+            }
+        });
+    });
+
+    // クリックで再選択（ファイルピッカーを開く）
+    grid.querySelectorAll('.thumbnail-item').forEach(item => {
+        item.addEventListener('click', () => {
+            imageInput.click();
+        });
+    });
 }
 
 // =====================================
