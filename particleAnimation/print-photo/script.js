@@ -1,7 +1,14 @@
 /**
- * PrintPhoto - メインスクリプト (フェーズ1: 基盤構築)
- * 画面遷移、ファイル選択、日付自動設定、ローカルストレージ復元
+ * PrintPhoto - メインスクリプト (フェーズ1+2: 基盤 + クロマキー)
  */
+
+import {
+    loadImageToCanvas,
+    applyChromaKey,
+    applyChromaKeyPreview,
+    pickColor,
+    rgbToHex,
+} from './chroma-key.js';
 
 // =====================================
 // DOM 要素
@@ -23,6 +30,12 @@ const btnBackTop = document.getElementById('btn-back-top');
 const btnBackCompose = document.getElementById('btn-back-compose');
 const btnShutter = document.getElementById('btn-shutter');
 
+const thresholdSlider = document.getElementById('threshold-slider');
+const featherSlider = document.getElementById('feather-slider');
+const colorDot = document.getElementById('color-dot');
+const colorValue = document.querySelector('.color-value');
+const overlayCanvas = document.getElementById('overlay-canvas');
+
 const inputTitle = document.getElementById('input-title');
 const inputComment = document.getElementById('input-comment');
 const inputPhotographer = document.getElementById('input-photographer');
@@ -40,12 +53,14 @@ const btnContinueWarning = document.getElementById('btn-continue-warning');
 let currentScreen = 'top';
 let selectedImageFile = null;
 let selectedImageDataUrl = null;
+let originalImageCanvas = null;   // 元画像（クロマキー適用前）
+let processedImageCanvas = null;  // 透過済み画像（フルサイズ）
+let targetColor = { r: 0, g: 255, b: 0 }; // デフォルト: 緑
 
 // =====================================
 // 初期化
 // =====================================
 function init() {
-    // ローディング終了
     setTimeout(() => {
         loader.style.opacity = '0';
         setTimeout(() => {
@@ -55,32 +70,33 @@ function init() {
         }, 500);
     }, 800);
 
-    // 日付自動設定
     inputDate.value = getTodayStr();
-
-    // ローカルストレージ復元
     restoreFormState();
-
-    // イベントリスナー
     bindEvents();
 }
 
 function bindEvents() {
-    // ファイル選択
     imageInput.addEventListener('change', handleFileSelect);
 
-    // 画面遷移
     cameraStartBtn.addEventListener('click', () => switchScreen('compose'));
     btnBackTop.addEventListener('click', () => switchScreen('top'));
     btnBackCompose.addEventListener('click', () => switchScreen('compose'));
     btnShutter.addEventListener('click', () => switchScreen('preview'));
 
-    // テキスト入力 → ローカルストレージ自動保存
     [inputTitle, inputComment, inputPhotographer, inputDate, inputLocation].forEach(el => {
         el.addEventListener('input', saveFormState);
     });
 
-    // ワーニングモーダル
+    // クロマキー調整スライダー
+    thresholdSlider.addEventListener('input', () => renderPreview());
+    featherSlider.addEventListener('input', () => renderPreview());
+
+    // 色ピックアップ（アップロードプレビューから）
+    uploadPreview.addEventListener('click', handleColorPick);
+
+    // 色ピックアップ（合成画面のオーバーレイから）
+    overlayCanvas.addEventListener('click', handleOverlayColorPick);
+
     btnCancelWarning.addEventListener('click', hideLocationWarning);
     btnRemoveLocation.addEventListener('click', () => {
         inputLocation.value = '';
@@ -93,7 +109,6 @@ function bindEvents() {
         proceedWithAction();
     });
 
-    // 保存・共有ボタン（場所ワーニング付き）
     document.getElementById('btn-save-png').addEventListener('click', () => handleActionWithWarning('save'));
     document.getElementById('btn-share').addEventListener('click', () => handleActionWithWarning('share'));
     document.getElementById('btn-copy').addEventListener('click', () => handleActionWithWarning('copy'));
@@ -110,22 +125,100 @@ function switchScreen(name) {
 }
 
 // =====================================
-// ファイル選択
+// ファイル選択 + クロマキー初期化
 // =====================================
-function handleFileSelect(e) {
+async function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     selectedImageFile = file;
 
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
         selectedImageDataUrl = ev.target.result;
+
+        // プレビュー表示
         uploadPreview.innerHTML = `<img src="${selectedImageDataUrl}" alt="選択された画像">`;
         uploadPreview.classList.add('active');
         cameraStartBtn.disabled = false;
+
+        // Canvas化
+        try {
+            originalImageCanvas = await loadImageToCanvas(selectedImageDataUrl);
+            // 初期クロマキー適用（緑背景）
+            await renderPreview();
+        } catch (err) {
+            console.error('Image load failed:', err);
+            showToast('画像の読み込みに失敗しました');
+        }
     };
     reader.readAsDataURL(file);
+}
+
+// =====================================
+// クロマキープレビュー描画
+// =====================================
+function renderPreview() {
+    if (!originalImageCanvas) return;
+
+    const threshold = parseInt(thresholdSlider.value, 10);
+    const feather = parseInt(featherSlider.value, 10);
+
+    // プレビュー用（高速・縮小）
+    const previewCanvas = applyChromaKeyPreview(originalImageCanvas, targetColor, threshold, feather);
+
+    // フルサイズも保持しておく（撮影時に使用）
+    processedImageCanvas = applyChromaKey(originalImageCanvas, targetColor, threshold, feather);
+
+    // overlay-canvas に描画（合成画面用）
+    const ctx = overlayCanvas.getContext('2d');
+    overlayCanvas.width = previewCanvas.width;
+    overlayCanvas.height = previewCanvas.height;
+    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    ctx.drawImage(previewCanvas, 0, 0);
+}
+
+// =====================================
+// 色ピックアップ（アップロードプレビュー）
+// =====================================
+function handleColorPick(e) {
+    if (!originalImageCanvas) return;
+    const rect = uploadPreview.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    const color = pickColor(originalImageCanvas, x, y, true);
+    if (color && color.a > 0) {
+        setTargetColor(color.r, color.g, color.b);
+    }
+}
+
+// =====================================
+// 色ピックアップ（合成オーバーレイ）
+// =====================================
+function handleOverlayColorPick(e) {
+    if (!originalImageCanvas) return;
+    const rect = overlayCanvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    // オリジナル画像（縮小版に合わせて座標換算）
+    const scaleX = originalImageCanvas.width / overlayCanvas.width;
+    const scaleY = originalImageCanvas.height / overlayCanvas.height;
+    const ox = Math.min(1, Math.max(0, x)) * (overlayCanvas.width / originalImageCanvas.width);
+    const oy = Math.min(1, Math.max(0, y)) * (overlayCanvas.height / originalImageCanvas.height);
+
+    const color = pickColor(originalImageCanvas, ox, oy, true);
+    if (color && color.a > 0) {
+        setTargetColor(color.r, color.g, color.b);
+    }
+}
+
+function setTargetColor(r, g, b) {
+    targetColor = { r, g, b };
+    colorDot.style.background = rgbToHex(r, g, b);
+    colorValue.textContent = `R:${r} G:${g} B:${b}`;
+    renderPreview();
 }
 
 // =====================================
@@ -235,4 +328,7 @@ window.PrintPhoto = {
     switchScreen,
     showToast,
     selectedImageDataUrl: () => selectedImageDataUrl,
+    getProcessedCanvas: () => processedImageCanvas,
+    getOriginalCanvas: () => originalImageCanvas,
+    getTargetColor: () => targetColor,
 };
