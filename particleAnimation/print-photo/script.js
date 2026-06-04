@@ -1,5 +1,5 @@
 /**
- * PrintPhoto - メインスクリプト (フェーズ1+2: 基盤 + クロマキー)
+ * PrintPhoto - メインスクリプト (フェーズ1+2+3: 基盤 + クロマキー + カメラ合成)
  */
 
 import {
@@ -9,6 +9,13 @@ import {
     pickColor,
     rgbToHex,
 } from './chroma-key.js';
+
+import {
+    startCamera,
+    stopCamera,
+    setExposure,
+    captureVideoFrame,
+} from './camera.js';
 
 // =====================================
 // DOM 要素
@@ -30,11 +37,16 @@ const btnBackTop = document.getElementById('btn-back-top');
 const btnBackCompose = document.getElementById('btn-back-compose');
 const btnShutter = document.getElementById('btn-shutter');
 
+const videoElement = document.getElementById('camera-video');
+const overlayCanvas = document.getElementById('overlay-canvas');
+const frameContent = document.getElementById('frame-content');
+
 const thresholdSlider = document.getElementById('threshold-slider');
 const featherSlider = document.getElementById('feather-slider');
+const brightnessSlider = document.getElementById('brightness-slider');
+const contrastSlider = document.getElementById('contrast-slider');
 const colorDot = document.getElementById('color-dot');
 const colorValue = document.querySelector('.color-value');
-const overlayCanvas = document.getElementById('overlay-canvas');
 
 const inputTitle = document.getElementById('input-title');
 const inputComment = document.getElementById('input-comment');
@@ -47,15 +59,30 @@ const btnCancelWarning = document.getElementById('btn-cancel-warning');
 const btnRemoveLocation = document.getElementById('btn-remove-location');
 const btnContinueWarning = document.getElementById('btn-continue-warning');
 
+const resultCanvas = document.getElementById('result-canvas');
+const previewFrame = document.getElementById('preview-frame');
+
 // =====================================
 // 状態
 // =====================================
 let currentScreen = 'top';
 let selectedImageFile = null;
 let selectedImageDataUrl = null;
-let originalImageCanvas = null;   // 元画像（クロマキー適用前）
-let processedImageCanvas = null;  // 透過済み画像（フルサイズ）
-let targetColor = { r: 0, g: 255, b: 0 }; // デフォルト: 緑
+let originalImageCanvas = null;
+let processedImageCanvas = null;
+let targetColor = { r: 0, g: 255, b: 0 };
+
+// オーバーレイ変形状態
+const overlayTransform = { x: 0, y: 0, scale: 1 };
+const MIN_SCALE = 0.2;
+const MAX_SCALE = 3.0;
+
+// ドラッグ・ピンチ状態
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let transformStart = { x: 0, y: 0 };
+let pinchStartDist = 0;
+let pinchStartScale = 1;
 
 // =====================================
 // 初期化
@@ -78,25 +105,40 @@ function init() {
 function bindEvents() {
     imageInput.addEventListener('change', handleFileSelect);
 
-    cameraStartBtn.addEventListener('click', () => switchScreen('compose'));
+    cameraStartBtn.addEventListener('click', async () => {
+        await startCompose();
+    });
     btnBackTop.addEventListener('click', () => switchScreen('top'));
     btnBackCompose.addEventListener('click', () => switchScreen('compose'));
-    btnShutter.addEventListener('click', () => switchScreen('preview'));
+    btnShutter.addEventListener('click', takePicture);
 
     [inputTitle, inputComment, inputPhotographer, inputDate, inputLocation].forEach(el => {
         el.addEventListener('input', saveFormState);
     });
 
-    // クロマキー調整スライダー
+    // クロマキー調整
     thresholdSlider.addEventListener('input', () => renderPreview());
     featherSlider.addEventListener('input', () => renderPreview());
 
-    // 色ピックアップ（アップロードプレビューから）
-    uploadPreview.addEventListener('click', handleColorPick);
+    // 露光調整
+    brightnessSlider.addEventListener('input', updateExposure);
+    contrastSlider.addEventListener('input', updateExposure);
 
-    // 色ピックアップ（合成画面のオーバーレイから）
+    // 色ピックアップ
+    uploadPreview.addEventListener('click', handleColorPick);
     overlayCanvas.addEventListener('click', handleOverlayColorPick);
 
+    // ドラッグ・ピンチ（overlay-canvas）
+    overlayCanvas.addEventListener('pointerdown', handlePointerDown);
+    overlayCanvas.addEventListener('pointermove', handlePointerMove);
+    overlayCanvas.addEventListener('pointerup', handlePointerUp);
+    overlayCanvas.addEventListener('pointercancel', handlePointerUp);
+
+    overlayCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    overlayCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    overlayCanvas.addEventListener('touchend', handleTouchEnd);
+
+    // ワーニング
     btnCancelWarning.addEventListener('click', hideLocationWarning);
     btnRemoveLocation.addEventListener('click', () => {
         inputLocation.value = '';
@@ -118,10 +160,50 @@ function bindEvents() {
 // 画面遷移
 // =====================================
 function switchScreen(name) {
+    // カメラ停止（トップに戻る時）
+    if (name === 'top' && currentScreen === 'compose') {
+        stopCamera();
+    }
+
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[name].classList.add('active');
     currentScreen = name;
     window.scrollTo(0, 0);
+}
+
+// =====================================
+// 合成画面開始（カメラ起動）
+// =====================================
+async function startCompose() {
+    switchScreen('compose');
+
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        showToast('カメラを使うにはHTTPS接続が必要です');
+        return;
+    }
+
+    try {
+        await startCamera(videoElement);
+        updateExposure();
+    } catch (err) {
+        console.error('Camera error:', err);
+        if (err.message === 'HTTPS_REQUIRED') {
+            showToast('HTTPS接続が必要です');
+        } else if (err.name === 'NotAllowedError') {
+            showToast('カメラの使用が許可されていません');
+        } else {
+            showToast('カメラの起動に失敗しました');
+        }
+    }
+}
+
+// =====================================
+// 露光調整
+// =====================================
+function updateExposure() {
+    const brightness = brightnessSlider.value;
+    const contrast = contrastSlider.value;
+    setExposure(videoElement, brightness, contrast);
 }
 
 // =====================================
@@ -136,16 +218,12 @@ async function handleFileSelect(e) {
     const reader = new FileReader();
     reader.onload = async (ev) => {
         selectedImageDataUrl = ev.target.result;
-
-        // プレビュー表示
         uploadPreview.innerHTML = `<img src="${selectedImageDataUrl}" alt="選択された画像">`;
         uploadPreview.classList.add('active');
         cameraStartBtn.disabled = false;
 
-        // Canvas化
         try {
             originalImageCanvas = await loadImageToCanvas(selectedImageDataUrl);
-            // 初期クロマキー適用（緑背景）
             await renderPreview();
         } catch (err) {
             console.error('Image load failed:', err);
@@ -164,50 +242,105 @@ function renderPreview() {
     const threshold = parseInt(thresholdSlider.value, 10);
     const feather = parseInt(featherSlider.value, 10);
 
-    // プレビュー用（高速・縮小）
     const previewCanvas = applyChromaKeyPreview(originalImageCanvas, targetColor, threshold, feather);
-
-    // フルサイズも保持しておく（撮影時に使用）
     processedImageCanvas = applyChromaKey(originalImageCanvas, targetColor, threshold, feather);
 
-    // overlay-canvas に描画（合成画面用）
     const ctx = overlayCanvas.getContext('2d');
     overlayCanvas.width = previewCanvas.width;
     overlayCanvas.height = previewCanvas.height;
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     ctx.drawImage(previewCanvas, 0, 0);
+
+    // 変形をリセットして適用
+    applyOverlayTransform();
 }
 
 // =====================================
-// 色ピックアップ（アップロードプレビュー）
+// オーバーレイ変形適用（CSS transform）
+// =====================================
+function applyOverlayTransform() {
+    overlayCanvas.style.transform = `translate(${overlayTransform.x}px, ${overlayTransform.y}px) scale(${overlayTransform.scale})`;
+}
+
+// =====================================
+// ドラッグ操作（マウス/タッチ 1本指）
+// =====================================
+function handlePointerDown(e) {
+    if (e.pointerType === 'touch' && e.isPrimary === false) return; // マルチタッチは別処理
+    isDragging = true;
+    dragStart = { x: e.clientX, y: e.clientY };
+    transformStart = { x: overlayTransform.x, y: overlayTransform.y };
+    overlayCanvas.setPointerCapture(e.pointerId);
+}
+
+function handlePointerMove(e) {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    overlayTransform.x = transformStart.x + dx;
+    overlayTransform.y = transformStart.y + dy;
+    applyOverlayTransform();
+}
+
+function handlePointerUp(e) {
+    isDragging = false;
+}
+
+// =====================================
+// ピンチ操作（タッチ 2本指）
+// =====================================
+function handleTouchStart(e) {
+    if (e.touches.length === 2) {
+        isDragging = false; // ドラッグを中断
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchStartDist = Math.sqrt(dx * dx + dy * dy);
+        pinchStartScale = overlayTransform.scale;
+    }
+}
+
+function handleTouchMove(e) {
+    if (e.touches.length === 2) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (pinchStartDist > 0) {
+            const newScale = pinchStartScale * (dist / pinchStartDist);
+            overlayTransform.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+            applyOverlayTransform();
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    if (e.touches.length < 2) {
+        pinchStartDist = 0;
+    }
+}
+
+// =====================================
+// 色ピックアップ
 // =====================================
 function handleColorPick(e) {
     if (!originalImageCanvas) return;
     const rect = uploadPreview.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-
     const color = pickColor(originalImageCanvas, x, y, true);
     if (color && color.a > 0) {
         setTargetColor(color.r, color.g, color.b);
     }
 }
 
-// =====================================
-// 色ピックアップ（合成オーバーレイ）
-// =====================================
 function handleOverlayColorPick(e) {
     if (!originalImageCanvas) return;
     const rect = overlayCanvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-
-    // オリジナル画像（縮小版に合わせて座標換算）
-    const scaleX = originalImageCanvas.width / overlayCanvas.width;
-    const scaleY = originalImageCanvas.height / overlayCanvas.height;
-    const ox = Math.min(1, Math.max(0, x)) * (overlayCanvas.width / originalImageCanvas.width);
-    const oy = Math.min(1, Math.max(0, y)) * (overlayCanvas.height / originalImageCanvas.height);
-
+    // 元画像座標に換算
+    const ox = x * (overlayCanvas.width / originalImageCanvas.width);
+    const oy = y * (overlayCanvas.height / originalImageCanvas.height);
     const color = pickColor(originalImageCanvas, ox, oy, true);
     if (color && color.a > 0) {
         setTargetColor(color.r, color.g, color.b);
@@ -219,6 +352,47 @@ function setTargetColor(r, g, b) {
     colorDot.style.background = rgbToHex(r, g, b);
     colorValue.textContent = `R:${r} G:${g} B:${b}`;
     renderPreview();
+}
+
+// =====================================
+// 撮影（video + overlay 合成）
+// =====================================
+function takePicture() {
+    if (!videoElement.videoWidth || !processedImageCanvas) {
+        showToast('カメラまたは画像が準備できていません');
+        return;
+    }
+
+    // フレームサイズ（合成エリアサイズに合わせる）
+    const fw = frameContent.offsetWidth;
+    const fh = frameContent.offsetHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = fw;
+    canvas.height = fh;
+    const ctx = canvas.getContext('2d');
+
+    // 1. カメラ映像を描画
+    ctx.drawImage(videoElement, 0, 0, fw, fh);
+
+    // 2. 透過画像を変形して重ねる
+    if (processedImageCanvas) {
+        ctx.save();
+        // overlayCanvas の変形をスケーリングして適用
+        const scaleX = fw / overlayCanvas.width;
+        const scaleY = fh / overlayCanvas.height;
+        ctx.translate(overlayTransform.x * scaleX, overlayTransform.y * scaleY);
+        ctx.scale(overlayTransform.scale, overlayTransform.scale);
+        ctx.drawImage(processedImageCanvas, 0, 0);
+        ctx.restore();
+    }
+
+    // result-canvas に表示（フェーズ3簡易版。フェーズ4でフレーム+テキスト合成に置き換え）
+    resultCanvas.width = canvas.width;
+    resultCanvas.height = canvas.height;
+    resultCanvas.getContext('2d').drawImage(canvas, 0, 0);
+
+    switchScreen('preview');
 }
 
 // =====================================
@@ -323,7 +497,7 @@ function showToast(message) {
 // =====================================
 document.addEventListener('DOMContentLoaded', init);
 
-// グローバルに公開（モジュール間連携用）
+// グローバルに公開
 window.PrintPhoto = {
     switchScreen,
     showToast,
@@ -331,4 +505,5 @@ window.PrintPhoto = {
     getProcessedCanvas: () => processedImageCanvas,
     getOriginalCanvas: () => originalImageCanvas,
     getTargetColor: () => targetColor,
+    getOverlayTransform: () => overlayTransform,
 };
