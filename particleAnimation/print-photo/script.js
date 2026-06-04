@@ -573,19 +573,135 @@ function hideLocationWarning() {
 function proceedWithAction() {
     switch (pendingAction) {
         case 'save':
-            // TODO: フェーズ5で実装
-            showToast('保存機能は開発中です');
+            savePng();
             break;
         case 'share':
-            // TODO: フェーズ5で実装
-            showToast('共有機能は開発中です');
+            shareImage();
             break;
         case 'copy':
-            // TODO: フェーズ5で実装
-            showToast('コピー機能は開発中です');
+            copyImage();
             break;
     }
     pendingAction = null;
+}
+
+// =====================================
+// 保存（PNGダウンロード）
+// =====================================
+function savePng() {
+    if (!resultCanvas.width) {
+        showToast('保存する画像がありません');
+        return;
+    }
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+    const filename = `PrintPhoto_${ts}.png`;
+    downloadCanvas(resultCanvas, filename);
+    showToast('画像を保存しました');
+}
+
+function downloadCanvas(canvas, filename) {
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+}
+
+// =====================================
+// 共有
+// =====================================
+async function shareImage() {
+    if (!resultCanvas.width) {
+        showToast('共有する画像がありません');
+        return;
+    }
+
+    const blob = await new Promise(resolve => resultCanvas.toBlob(resolve, 'image/png'));
+    const file = new File([blob], 'PrintPhoto.png', { type: 'image/png' });
+
+    // Web Share API（対応環境）
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: inputTitle.value || 'PrintPhoto',
+                text: getShareText(),
+            });
+            showToast('共有しました');
+            return;
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Share failed:', err);
+            }
+        }
+    }
+
+    // フォールバック: X Intent
+    openXIntent();
+}
+
+// =====================================
+// X Intent
+// =====================================
+function openXIntent() {
+    const text = encodeURIComponent(getShareText());
+    const url = `https://x.com/intent/post?text=${text}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    showToast('Xの投稿画面を開きました');
+}
+
+// =====================================
+// クリップボードコピー
+// =====================================
+async function copyImage() {
+    if (!resultCanvas.width) {
+        showToast('コピーする画像がありません');
+        return;
+    }
+
+    try {
+        const blob = await new Promise(resolve => resultCanvas.toBlob(resolve, 'image/png'));
+        if (navigator.clipboard && navigator.clipboard.write) {
+            await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob }),
+            ]);
+            showToast('画像をコピーしました');
+        } else {
+            throw new Error('Clipboard API not supported');
+        }
+    } catch (err) {
+        console.error('Copy failed:', err);
+        // フォールバック: DataURLをコピー
+        try {
+            const dataUrl = resultCanvas.toDataURL('image/png');
+            await navigator.clipboard.writeText(dataUrl);
+            showToast('画像URLをコピーしました（DataURL）');
+        } catch (e) {
+            showToast('コピーに失敗しました');
+        }
+    }
+}
+
+// =====================================
+// 共有テキスト生成
+// =====================================
+function getShareText() {
+    const parts = [];
+    if (inputTitle.value) parts.push(inputTitle.value);
+    if (inputComment.value) parts.push(inputComment.value);
+    if (inputLocation.value) parts.push(`📍 ${inputLocation.value}`);
+    if (inputDate.value) parts.push(`📅 ${inputDate.value}`);
+    if (inputPhotographer.value) parts.push(`by ${inputPhotographer.value}`);
+
+    // ハッシュタグ
+    const tags = ['#PrintPhoto'];
+    try {
+        const custom = localStorage.getItem('pp_custom_tags');
+        if (custom) tags.push(...custom.split(/\s+/).filter(t => t.startsWith('#')));
+    } catch (e) {}
+    parts.push(tags.join(' '));
+
+    return parts.join('\n');
 }
 
 // =====================================
