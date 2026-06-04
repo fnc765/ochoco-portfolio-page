@@ -16,10 +16,11 @@ export default defineConfig({
             name: 'chromium',
             use: { ...devices['Desktop Chrome'] },
         },
-        {
-            name: 'Mobile Safari',
-            use: { ...devices['iPhone 13'] },
-        },
+        // WebKit未インストールのためコメントアウト
+        // {
+        //     name: 'Mobile Safari',
+        //     use: { ...devices['iPhone 13'] },
+        // },
     ],
     webServer: {
         command: 'npx http-server ./ -p 8080 -s',

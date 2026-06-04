@@ -11,12 +11,9 @@ import {
 } from '../../storage.js';
 
 describe('storage', () => {
-    beforeEach(async () => {
-        // テスト前に全削除
-        const thumbs = await getAllThumbnails();
-        for (const t of thumbs) {
-            await deleteThumbnail(t.id);
-        }
+    beforeEach(() => {
+        // グローバルFakeDBをリセット
+        if (global.indexedDB._reset) global.indexedDB._reset();
     });
 
     it('U-S1〜S4: 保存・読み込み', async () => {

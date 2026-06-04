@@ -6,7 +6,11 @@ class MockCanvasRenderingContext2D {
     constructor(width, height) {
         this.width = width;
         this.height = height;
-        this._data = new ImageData(width, height);
+        this._data = {
+            data: new Uint8ClampedArray(width * height * 4),
+            width: width,
+            height: height,
+        };
         this.fillStyle = '#000';
         this.font = '10px sans-serif';
         this.textAlign = 'start';
@@ -156,3 +160,116 @@ global.document = {
 };
 
 global.HTMLCanvasElement = MockCanvasElement;
+
+// =====================================
+// IndexedDB モック
+// =====================================
+class FakeIDBDatabase {
+    constructor() {
+        this.objectStoreNames = { contains: () => false };
+        this._stores = {};
+    }
+    createObjectStore(name, options) {
+        const store = new FakeIDBObjectStore(name, options);
+        this._stores[name] = store;
+        return store;
+    }
+    transaction(storeNames, mode) {
+        return new FakeIDBTransaction(this._stores, storeNames, mode);
+    }
+    close() {}
+}
+
+class FakeIDBObjectStore {
+    constructor(name, options) {
+        this.name = name;
+        this.keyPath = options?.keyPath;
+        this._data = new Map();
+        this._indexes = {};
+    }
+    createIndex(name, keyPath, options) {
+        this._indexes[name] = { keyPath, unique: options?.unique };
+    }
+    put(value) {
+        this._data.set(value[this.keyPath], value);
+        return { set onsuccess(fn) { fn(); }, set onerror(fn) {} };
+    }
+    get(key) {
+        const value = this._data.get(key);
+        return { result: value || undefined, set onsuccess(fn) { fn(); }, set onerror(fn) {} };
+    }
+    delete(key) {
+        this._data.delete(key);
+        return { set onsuccess(fn) { fn(); }, set onerror(fn) {} };
+    }
+    openCursor() {
+        const entries = Array.from(this._data.values());
+        let index = -1;
+        const req = {
+            result: null,
+            set onsuccess(fn) {
+                const advance = () => {
+                    index++;
+                    if (index < entries.length) {
+                        req.result = { value: entries[index], continue: advance };
+                    } else {
+                        req.result = null;
+                    }
+                    fn({ target: req });
+                };
+                advance();
+            },
+            set onerror(fn) {},
+        };
+        return req;
+    }
+    index(name) {
+        // createdAt インデックス用
+        return {
+            openCursor: (range, direction) => this.openCursor(),
+        };
+    }
+}
+
+class FakeIDBTransaction {
+    constructor(stores, storeNames, mode) {
+        this._stores = stores;
+        this._storeNames = Array.isArray(storeNames) ? storeNames : [storeNames];
+        this._mode = mode;
+    }
+    objectStore(name) {
+        if (!this._stores[name]) {
+            this._stores[name] = new FakeIDBObjectStore(name, { keyPath: 'id' });
+        }
+        return this._stores[name];
+    }
+    get oncomplete() { return this._oncomplete; }
+    set oncomplete(fn) { this._oncomplete = fn; if (fn) fn(); }
+    get onerror() { return this._onerror; }
+    set onerror(fn) { this._onerror = fn; }
+}
+
+class FakeIDBRequest {
+    constructor() {
+        this.result = null;
+        this.error = null;
+    }
+}
+
+// グローバルに1つのDBインスタンスを保持（テスト間でデータを共有）
+let globalFakeDB = null;
+
+global.indexedDB = {
+    open: (name, version) => {
+        const req = new FakeIDBRequest();
+        setTimeout(() => {
+            if (!globalFakeDB) {
+                globalFakeDB = new FakeIDBDatabase();
+            }
+            req.result = globalFakeDB;
+            if (req.onsuccess) req.onsuccess({ target: req });
+        }, 0);
+        return req;
+    },
+    _reset: () => { globalFakeDB = null; },
+};
