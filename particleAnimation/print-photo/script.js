@@ -17,6 +17,8 @@ import {
     captureVideoFrame,
 } from './camera.js';
 
+import { renderFrame } from './frame-render.js';
+
 // =====================================
 // DOM 要素
 // =====================================
@@ -113,7 +115,11 @@ function bindEvents() {
     btnShutter.addEventListener('click', takePicture);
 
     [inputTitle, inputComment, inputPhotographer, inputDate, inputLocation].forEach(el => {
-        el.addEventListener('input', saveFormState);
+        el.addEventListener('input', () => {
+            saveFormState();
+            syncFrameTextLayer();
+            updatePreviewFrame();
+        });
     });
 
     // クロマキー調整
@@ -355,7 +361,7 @@ function setTargetColor(r, g, b) {
 }
 
 // =====================================
-// 撮影（video + overlay 合成）
+// 撮影（フレーム + video + overlay + テキスト合成）
 // =====================================
 function takePicture() {
     if (!videoElement.videoWidth || !processedImageCanvas) {
@@ -363,36 +369,141 @@ function takePicture() {
         return;
     }
 
-    // フレームサイズ（合成エリアサイズに合わせる）
-    const fw = frameContent.offsetWidth;
-    const fh = frameContent.offsetHeight;
+    const frameCanvas = renderFrame({
+        background: videoElement,
+        overlay: processedImageCanvas,
+        overlayTransform: overlayTransform,
+        title: inputTitle.value,
+        comment: inputComment.value,
+        photographer: inputPhotographer.value,
+        date: inputDate.value,
+        location: inputLocation.value,
+    });
 
-    const canvas = document.createElement('canvas');
-    canvas.width = fw;
-    canvas.height = fh;
-    const ctx = canvas.getContext('2d');
+    // result-canvas に表示
+    resultCanvas.width = frameCanvas.width;
+    resultCanvas.height = frameCanvas.height;
+    resultCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
 
-    // 1. カメラ映像を描画
-    ctx.drawImage(videoElement, 0, 0, fw, fh);
-
-    // 2. 透過画像を変形して重ねる
-    if (processedImageCanvas) {
-        ctx.save();
-        // overlayCanvas の変形をスケーリングして適用
-        const scaleX = fw / overlayCanvas.width;
-        const scaleY = fh / overlayCanvas.height;
-        ctx.translate(overlayTransform.x * scaleX, overlayTransform.y * scaleY);
-        ctx.scale(overlayTransform.scale, overlayTransform.scale);
-        ctx.drawImage(processedImageCanvas, 0, 0);
-        ctx.restore();
-    }
-
-    // result-canvas に表示（フェーズ3簡易版。フェーズ4でフレーム+テキスト合成に置き換え）
-    resultCanvas.width = canvas.width;
-    resultCanvas.height = canvas.height;
-    resultCanvas.getContext('2d').drawImage(canvas, 0, 0);
+    // フレームテキストレイヤーを同期（合成画面用）
+    syncFrameTextLayer();
 
     switchScreen('preview');
+}
+
+// =====================================
+// フレームテキストレイヤー同期
+// =====================================
+function syncFrameTextLayer() {
+    document.getElementById('frame-title').textContent = inputTitle.value;
+    document.getElementById('frame-comment').textContent = inputComment.value;
+    document.getElementById('frame-photographer').textContent = inputPhotographer.value ? `撮影者: ${inputPhotographer.value}` : '';
+    const dateLoc = [inputDate.value, inputLocation.value].filter(Boolean).join('  ');
+    document.getElementById('frame-date-location').textContent = dateLoc;
+}
+
+// =====================================
+// プレビュー画面のフレーム再描画
+// =====================================
+function updatePreviewFrame() {
+    if (currentScreen !== 'preview' || !resultCanvas.width) return;
+
+    // result-canvas から背景を取得（既に合成済みの画像）
+    // ただしテキストだけ変更する場合、再撮影なしでフレームを再描画するには
+    // カメラ映像を保持している必要がある → 簡易的に再撮影と同じ処理
+    // 実際には video は停止している可能性があるので、result-canvas の内容をベースにテキストだけ上書き
+    const baseCanvas = document.createElement('canvas');
+    baseCanvas.width = resultCanvas.width;
+    baseCanvas.height = resultCanvas.height;
+    baseCanvas.getContext('2d').drawImage(resultCanvas, 0, 0);
+
+    // 白フレーム部分をクリアして再描画（簡易：フル再合成）
+    // 最も確実な方法は takePicture と同じだが video が停止している場合がある
+    // ここでは result-canvas の内容を保持しつつ、テキスト領域だけ白塗り＆再描画
+    const ctx = resultCanvas.getContext('2d');
+    const W = resultCanvas.width;
+    const H = resultCanvas.height;
+    const scale = W / 2048;
+    const textAreaTop = Math.round(1149 * scale);
+
+    // テキストエリアを白で塗りつぶし
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, textAreaTop, W, H - textAreaTop);
+
+    // テキスト再描画（frame-render.js の内部ロジックを簡易再現）
+    const fontFamily = "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif";
+    ctx.fillStyle = '#000000';
+    ctx.textBaseline = 'bottom';
+    const marginX = Math.round(48 * scale);
+    const marginBottom = Math.round(36 * scale);
+    const bottomY = H - marginBottom;
+    const centerX = W / 2;
+
+    // タイトル
+    if (inputTitle.value) {
+        const maxW = W - marginX * 2;
+        let size = Math.round(72 * scale);
+        ctx.font = `700 ${size}px ${fontFamily}`;
+        while (ctx.measureText(inputTitle.value).width > maxW && size > 10) {
+            size -= 2;
+            ctx.font = `700 ${size}px ${fontFamily}`;
+        }
+        ctx.textAlign = 'center';
+        ctx.fillText(inputTitle.value, centerX, bottomY - Math.round(50 * scale));
+    }
+
+    // コメント
+    if (inputComment.value) {
+        const maxW = W - marginX * 2;
+        let size = Math.round(40 * scale);
+        ctx.font = `400 ${size}px ${fontFamily}`;
+        ctx.textAlign = 'center';
+        const commentY = inputTitle.value
+            ? bottomY - Math.round(50 * scale) - Math.round(8 * scale)
+            : bottomY - Math.round(30 * scale);
+        const lines = wrapTextSimple(ctx, inputComment.value, maxW);
+        lines.forEach((line, i) => {
+            const lineY = commentY - (lines.length - 1 - i) * (size * 1.3);
+            ctx.fillText(line, centerX, lineY);
+        });
+    }
+
+    // 撮影者
+    if (inputPhotographer.value) {
+        const metaSize = Math.round(28 * scale);
+        ctx.font = `400 ${metaSize}px ${fontFamily}`;
+        ctx.textAlign = 'left';
+        ctx.fillText(`撮影者: ${inputPhotographer.value}`, marginX, bottomY);
+    }
+
+    // 日付・場所
+    const rightText = [inputDate.value, inputLocation.value].filter(Boolean).join('  ');
+    if (rightText) {
+        const metaSize = Math.round(28 * scale);
+        ctx.font = `400 ${metaSize}px ${fontFamily}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(rightText, W - marginX, bottomY);
+    }
+}
+
+function wrapTextSimple(ctx, text, maxWidth) {
+    const lines = [];
+    const paragraphs = text.split('\n');
+    for (const para of paragraphs) {
+        const chars = para.split('');
+        let current = '';
+        for (const ch of chars) {
+            const test = current + ch;
+            if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+                lines.push(current);
+                current = ch;
+            } else {
+                current = test;
+            }
+        }
+        if (current) lines.push(current);
+    }
+    return lines.length ? lines : [text];
 }
 
 // =====================================
