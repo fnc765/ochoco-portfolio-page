@@ -173,8 +173,9 @@ function hideCameraGuide() {
 function bindEvents() {
     imageInput.addEventListener('change', handleFileSelect);
 
-    cameraStartBtn.addEventListener('click', async () => {
-        await startCompose();
+    // カメラ起動ボタン - getUserMedia はユーザージェスチャーから同期的に呼ぶ必要がある
+    cameraStartBtn.addEventListener('click', () => {
+        handleCameraStart();
     });
     btnBackTop.addEventListener('click', () => switchScreen('top'));
     btnBackCompose.addEventListener('click', () => switchScreen('compose'));
@@ -248,71 +249,186 @@ function switchScreen(name) {
 }
 
 // =====================================
-// 合成画面開始（カメラ起動）
+// カメラ起動ハンドラー（ユーザージェスチャーから同期的に呼ぶ）
 // =====================================
-async function startCompose() {
+function handleCameraStart() {
+    console.log('[PrintPhoto] handleCameraStart called');
     if (!selectedImageDataUrl) {
         showToast('先に画像を選択してください');
+        return;
+    }
+
+    // アプリ内ブラウザ（LINE/Instagram/Twitter等）では getUserMedia が無効なことが多い
+    const inAppBrowser = detectInAppBrowser();
+    if (inAppBrowser) {
+        showCameraGuide('【' + inAppBrowser + '】アプリ内ブラウザではカメラ機能が使用できません。Safari または Chrome の「本体」でこのページを開いてください。（アプリ内の「⋯」メニューから「ブラウザで開く」を選んでください）');
         return;
     }
 
     switchScreen('compose');
     hideCameraGuide();
 
-    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
-
-    // HTTPS でない場合は警告
-    if (!isSecure) {
-        showCameraGuide('カメラを使うにはHTTPS接続が必要です。ブラウザのアドレスバーに「https://」があるか確認してください。');
-        // カメラなしモードで続行（黒背景）
+    // navigator.mediaDevices の存在確認
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('[PrintPhoto] getUserMedia not supported');
+        showCameraGuide('お使いのブラウザはカメラ機能に対応していません。Safari / Chrome / Edge をお試しください。');
         return;
     }
 
-    // Permissions API で権限状態を確認（可能な場合）
-    if (navigator.permissions && navigator.permissions.query) {
-        try {
-            const status = await navigator.permissions.query({ name: 'camera' });
-            cameraPermissionState = status.state;
-        } catch (e) {
-            cameraPermissionState = 'unknown';
-        }
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || /^127\./.test(window.location.hostname) || /^192\.168\./.test(window.location.hostname) || /^10\./.test(window.location.hostname);
+    console.log('[PrintPhoto] isSecure:', isSecure, 'protocol:', window.location.protocol, 'hostname:', window.location.hostname);
+    if (!isSecure) {
+        showCameraGuide('カメラを使うにはHTTPS接続が必要です。現在: ' + window.location.protocol + '//' + window.location.host);
+        return;
     }
 
-    // 毎回 getUserMedia を呼ぶ（ブラウザに権限ダイアログを出させる）
-    await tryStartCamera();
+    // Permissions-Policy / Feature-Policy でカメラがブロックされていないか確認
+    if (!isCameraAllowedByPolicy()) {
+        showCameraGuide('このサイトのHTTPヘッダー（Permissions-Policy）でカメラがブロックされている可能性があります。サーバー設定を確認してください。');
+        return;
+    }
+
+    // getUserMedia を同期的に呼ぶ（Promise.then で非同期処理を分離）
+    const constraints = {
+        video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+        },
+        audio: false,
+    };
+
+    console.log('[PrintPhoto] Requesting getUserMedia...');
+    let resolved = false;
+
+    // getUserMedia が無視された場合（Promiseがpendingのまま）を検出するためのタイムアウト
+    const timeoutId = setTimeout(() => {
+        if (!resolved) {
+            console.error('[PrintPhoto] getUserMedia timed out after 10s — browser may be ignoring the request');
+            onCameraError({ name: 'TimeoutError', message: 'ブラウザがカメラ要求を無視しました（Permissions-Policy、アプリ内ブラウザ、またはグローバル設定の可能性）' });
+        }
+    }, 10000);
+
+    navigator.mediaDevices.getUserMedia(constraints)
+        .then((stream) => {
+            resolved = true;
+            clearTimeout(timeoutId);
+            console.log('[PrintPhoto] getUserMedia success');
+            onCameraSuccess(stream);
+        })
+        .catch((err) => {
+            resolved = true;
+            clearTimeout(timeoutId);
+            console.log('[PrintPhoto] getUserMedia first attempt failed:', err.name, err.message);
+            // facingMode を外して再試行
+            if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+                return navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false,
+                });
+            }
+            throw err;
+        })
+        .then((stream) => {
+            if (stream) onCameraSuccess(stream);
+        })
+        .catch((err) => {
+            if (!resolved) {
+                resolved = true;
+                clearTimeout(timeoutId);
+            }
+            console.error('[PrintPhoto] getUserMedia final error:', err.name, err.message);
+            onCameraError(err);
+        });
 }
 
-async function tryStartCamera() {
-    try {
-        await startCamera(videoElement);
-        isCameraActive = true;
-        updateExposure();
-        hideCameraGuide();
-    } catch (err) {
-        console.error('Camera error:', err);
-        isCameraActive = false;
+// =====================================
+// アプリ内ブラウザ検出
+// =====================================
+function detectInAppBrowser() {
+    const ua = navigator.userAgent || '';
+    const standAlone = navigator.standalone;
+    // iOS WKWebView（アプリ内ブラウザの特徴）
+    if (/Line\//i.test(ua)) return 'LINE';
+    if (/Instagram/i.test(ua)) return 'Instagram';
+    if (/FBAN|FBAV/i.test(ua)) return 'Facebook';
+    if (/Twitter/i.test(ua)) return 'Twitter/X';
+    // iOS で Safari ではなく、かつ standalone でない場合はアプリ内ブラウザの可能性が高い
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
+    if (isIOS && !isSafari && !standAlone) {
+        return 'アプリ内';
+    }
+    return null;
+}
 
-        if (err.name === 'NotAllowedError') {
-            // 拒否された：OS別ガイダンス
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            const isAndroid = /Android/.test(navigator.userAgent);
-
-            let guide = '';
-            if (isIOS) {
-                guide = 'カメラへのアクセスが拒否されました。iOSの「設定」→「Safari」→「カメラ」→「許可」に変更してください。';
-            } else if (isAndroid) {
-                guide = 'カメラへのアクセスが拒否されました。Chromeの設定（︙）→「設定」→「サイトの設定」→「カメラ」で許可してください。';
-            } else {
-                guide = 'カメラへのアクセスが拒否されました。ブラウザのアドレスバー横のカメラアイコン🎥をクリックして許可してください。';
-            }
-            showCameraGuide(guide);
-        } else if (err.name === 'NotFoundError') {
-            showCameraGuide('カメラが見つかりません。フロントカメラのあるデバイスでお試しください。');
-        } else if (err.message === 'HTTPS_REQUIRED') {
-            showCameraGuide('カメラを使うにはHTTPS接続が必要です。');
-        } else {
-            showCameraGuide('カメラの起動に失敗しました。ページを再読み込みしてお試しください。');
+// =====================================
+// Permissions-Policy / Feature-Policy 検出
+// =====================================
+function isCameraAllowedByPolicy() {
+    // document.featurePolicy は旧 API（Chrome 74-88頃）
+    if (document.featurePolicy && document.featurePolicy.allowsFeature) {
+        try {
+            return document.featurePolicy.allowsFeature('camera');
+        } catch (e) {
+            return true; // 確認できない場合は許可とみなす
         }
+    }
+    // document.permissionsPolicy は新 API（未対応ブラウザが多い）
+    if (document.permissionsPolicy && document.permissionsPolicy.allowsFeature) {
+        try {
+            return document.permissionsPolicy.allowsFeature('camera');
+        } catch (e) {
+            return true;
+        }
+    }
+    // 確認手段がない場合は許可とみなす
+    return true;
+}
+
+function onCameraSuccess(stream) {
+    videoElement.srcObject = stream;
+    videoElement.onloadedmetadata = () => {
+        videoElement.play().catch(() => {});
+    };
+    isCameraActive = true;
+    updateExposure();
+    hideCameraGuide();
+}
+
+function onCameraError(err) {
+    console.error('[PrintPhoto] Camera error:', err.name, err.message);
+    isCameraActive = false;
+
+    // エラー時はトップ画面に戻してガイドを表示（compose画面ではガイドが見えない）
+    switchScreen('top');
+
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isAndroid = /Android/.test(ua);
+
+    if (err.name === 'NotAllowedError') {
+        let guide = '';
+        if (isIOS) {
+            guide = '【iOS】カメラへのアクセスが拒否されました。iPhoneの「設定」→「Safari」→「カメラ」→このサイトを「許可」に変更してください。変更後はSafariのタブを閉じて再度開いてください。';
+        } else if (isAndroid) {
+            guide = '【Android】カメラへのアクセスが拒否されました。Chromeのメニュー(︙)→「設定」→「サイトの設定」→「カメラ」でこのサイトを許可してください。';
+        } else {
+            guide = 'カメラへのアクセスが拒否されました。アドレスバー横のカメラアイコンをクリックして許可してください。';
+        }
+        showCameraGuide(guide);
+    } else if (err.name === 'NotFoundError') {
+        showCameraGuide('カメラが見つかりません。別のデバイスでお試しください。');
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        showCameraGuide('カメラが他のアプリで使用中です。他のアプリを閉じてから再試行してください。');
+    } else if (err.name === 'TimeoutError') {
+        let guide = 'カメラの要求がブラウザに無視されました。以下を確認してください：\n';
+        guide += '1. このページを「Safari」または「Chrome」の本体で開いているか（LINEやInstagram内のブラウザでは動作しません）\n';
+        guide += '2. サーバーのHTTPヘッダー（Permissions-Policy）でカメラがブロックされていないか\n';
+        guide += '3. iOSの「設定」→「Safari」→「カメラ」が全てのサイトで「拒否」になっていないか';
+        showCameraGuide(guide);
+    } else {
+        showCameraGuide('カメラの起動に失敗しました（' + err.name + '）。ページを再読み込みしてお試しください。');
     }
 }
 

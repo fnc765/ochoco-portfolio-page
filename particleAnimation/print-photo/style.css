@@ -129,11 +129,19 @@ html, body {
 }
 
 .warning-card {
-    background: rgba(220, 53, 69, 0.15);
-    border-color: rgba(220, 53, 69, 0.4);
+    background: rgba(220, 53, 69, 0.2);
+    border: 2px solid rgba(220, 53, 69, 0.8);
     color: #ff8a8a;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    font-weight: 700;
     text-align: center;
+    padding: 1rem;
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% { border-color: rgba(220, 53, 69, 0.8); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+    50% { border-color: rgba(220, 53, 69, 1); box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
 }
 
 .warning-card i {

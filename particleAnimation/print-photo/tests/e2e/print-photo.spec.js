@@ -12,10 +12,7 @@ test.beforeEach(async ({ context }) => {
         if (!navigator.mediaDevices) {
             navigator.mediaDevices = {};
         }
-        const mockStream = {
-            getTracks: () => [{ stop: () => {} }],
-        };
-        navigator.mediaDevices.getUserMedia = async () => mockStream;
+        navigator.mediaDevices.getUserMedia = async () => new MediaStream();
 
         navigator.geolocation.getCurrentPosition = (success) => {
             success({ coords: { latitude: 35.0, longitude: 139.0 } });
