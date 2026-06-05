@@ -14,8 +14,6 @@ import {
 import {
     startCamera,
     stopCamera,
-    setExposure,
-    getExposureFilter,
 } from './camera.js';
 
 import { renderFrame } from './frame-render.js';
@@ -88,6 +86,7 @@ let selectedImageFile = null;
 let selectedImageDataUrl = null;
 let originalImageCanvas = null;
 let processedImageCanvas = null;
+let currentPreviewCanvas = null;
 let targetColor = { r: 0, g: 255, b: 0 };
 
 // オーバーレイ変形状態
@@ -433,12 +432,34 @@ function onCameraError(err) {
 }
 
 // =====================================
-// 露光調整
+// 露光調整（入力画像に適用）
 // =====================================
 function updateExposure() {
-    const brightness = brightnessSlider.value;
-    const contrast = contrastSlider.value;
-    setExposure(videoElement, brightness, contrast);
+    redrawOverlayCanvas();
+}
+
+// =====================================
+// オーバーレイCanvas再描画（明るさ・コントラスト適用）
+// =====================================
+function redrawOverlayCanvas() {
+    if (!currentPreviewCanvas) return;
+
+    const ctx = overlayCanvas.getContext('2d');
+    overlayCanvas.width = currentPreviewCanvas.width;
+    overlayCanvas.height = currentPreviewCanvas.height;
+    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+    const brightness = parseInt(brightnessSlider.value, 10);
+    const contrast = parseInt(contrastSlider.value, 10);
+
+    if (brightness !== 100 || contrast !== 100) {
+        ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+    }
+
+    ctx.drawImage(currentPreviewCanvas, 0, 0);
+    ctx.filter = 'none';
+
+    applyOverlayTransform();
 }
 
 // =====================================
@@ -464,11 +485,8 @@ async function handleFileSelect(e) {
             const isTransparent = hasTransparency(originalImageCanvas);
             if (isTransparent) {
                 processedImageCanvas = originalImageCanvas;
-                const ctx = overlayCanvas.getContext('2d');
-                overlayCanvas.width = originalImageCanvas.width;
-                overlayCanvas.height = originalImageCanvas.height;
-                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-                ctx.drawImage(originalImageCanvas, 0, 0);
+                currentPreviewCanvas = originalImageCanvas;
+                redrawOverlayCanvas();
                 applyOverlayTransform();
                 showToast('透過画像を読み込みました');
             } else {
@@ -499,17 +517,10 @@ function renderPreview() {
     const threshold = parseInt(thresholdSlider.value, 10);
     const feather = parseInt(featherSlider.value, 10);
 
-    const previewCanvas = applyChromaKeyPreview(originalImageCanvas, targetColor, threshold, feather);
+    currentPreviewCanvas = applyChromaKeyPreview(originalImageCanvas, targetColor, threshold, feather);
     processedImageCanvas = applyChromaKey(originalImageCanvas, targetColor, threshold, feather);
 
-    const ctx = overlayCanvas.getContext('2d');
-    overlayCanvas.width = previewCanvas.width;
-    overlayCanvas.height = previewCanvas.height;
-    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-    ctx.drawImage(previewCanvas, 0, 0);
-
-    // 変形をリセットして適用
-    applyOverlayTransform();
+    redrawOverlayCanvas();
 }
 
 // =====================================

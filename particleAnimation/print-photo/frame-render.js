@@ -53,20 +53,12 @@ export function renderFrame(opts) {
     ctx.fillStyle = '#000000';
     ctx.fillRect(px, py, pw, ph);
 
-    // 3. カメラ映像を描画（露光調整を filter で適用）
+    // 3. カメラ映像を描画
     if (opts.background) {
-        ctx.save();
-        const b = opts.brightness ?? 100;
-        const c = opts.contrast ?? 100;
-        const s = opts.saturation ?? 100;
-        if (b !== 100 || c !== 100 || s !== 100) {
-            ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
-        }
         ctx.drawImage(opts.background, px, py, pw, ph);
-        ctx.restore();
     }
 
-    // 4. 透過画像を変形して重ねる
+    // 4. 透過画像を変形して重ねる（明るさ・コントラスト調整を適用）
     if (opts.overlay && opts.overlayTransform) {
         ctx.save();
         const tf = opts.overlayTransform;
@@ -76,6 +68,12 @@ export function renderFrame(opts) {
         const sy = ph / oy;
         ctx.translate(px + tf.x * sx, py + tf.y * sy);
         ctx.scale(tf.scale, tf.scale);
+        const b = opts.brightness ?? 100;
+        const c = opts.contrast ?? 100;
+        const s = opts.saturation ?? 100;
+        if (b !== 100 || c !== 100 || s !== 100) {
+            ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+        }
         ctx.drawImage(opts.overlay, 0, 0);
         ctx.restore();
     }
