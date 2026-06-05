@@ -27,6 +27,7 @@ import {
 
 import {
     saveThumbnail,
+    loadThumbnail,
     getAllThumbnails,
     deleteThumbnail,
 } from './storage.js';
@@ -46,6 +47,9 @@ const screens = {
 const imageInput = document.getElementById('image-input');
 const uploadPreview = document.getElementById('upload-preview');
 const cameraStartBtn = document.getElementById('camera-start-btn');
+const httpsWarning = document.getElementById('https-warning');
+const cameraPermissionGuide = document.getElementById('camera-permission-guide');
+const cameraPermissionText = document.getElementById('camera-permission-text');
 
 const btnBackTop = document.getElementById('btn-back-top');
 const btnBackCompose = document.getElementById('btn-back-compose');
@@ -98,6 +102,10 @@ let transformStart = { x: 0, y: 0 };
 let pinchStartDist = 0;
 let pinchStartScale = 1;
 
+// カメラ状態
+let cameraPermissionState = 'prompt'; // 'granted' | 'denied' | 'prompt' | 'unknown'
+let isCameraActive = false;
+
 // =====================================
 // 初期化
 // =====================================
@@ -114,9 +122,54 @@ function init() {
     inputDate.value = getTodayStr();
     restoreFormState();
     restoreThumbnails();
+    checkEnvironment();
     bindEvents();
 }
 
+// =====================================
+// 環境チェック（HTTPS / カメラ権限）
+// =====================================
+function checkEnvironment() {
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+    if (!isSecure) {
+        httpsWarning.style.display = 'block';
+        httpsWarning.querySelector('p').innerHTML =
+            '<i class="fas fa-lock" aria-hidden="true"></i> ' +
+            'カメラを使うには<strong>HTTPS</strong>接続が必要です。<br>' +
+            '現在: ' + window.location.protocol + '//' + window.location.host;
+    }
+
+    // Permissions API でカメラ権限状態を確認（可能な場合）
+    if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'camera' })
+            .then((status) => {
+                cameraPermissionState = status.state; // 'granted' | 'denied' | 'prompt'
+                status.onchange = () => {
+                    cameraPermissionState = status.state;
+                    if (status.state === 'granted') {
+                        hideCameraGuide();
+                    }
+                };
+            })
+            .catch(() => {
+                // iOS Safari等、Permissions API未対応環境
+                cameraPermissionState = 'unknown';
+            });
+    }
+}
+
+function showCameraGuide(message) {
+    cameraPermissionGuide.style.display = 'block';
+    cameraPermissionText.textContent = message;
+}
+
+function hideCameraGuide() {
+    cameraPermissionGuide.style.display = 'none';
+}
+
+// =====================================
+// イベントバインディング
+// =====================================
 function bindEvents() {
     imageInput.addEventListener('change', handleFileSelect);
 
@@ -174,7 +227,7 @@ function bindEvents() {
     document.getElementById('btn-share').addEventListener('click', () => handleActionWithWarning('share'));
     document.getElementById('btn-copy').addEventListener('click', () => handleActionWithWarning('copy'));
 
-    // 位置情報取得
+    // 位置情報
     document.getElementById('btn-get-location').addEventListener('click', handleGetLocation);
 }
 
@@ -185,6 +238,7 @@ function switchScreen(name) {
     // カメラ停止（トップに戻る時）
     if (name === 'top' && currentScreen === 'compose') {
         stopCamera();
+        isCameraActive = false;
     }
 
     Object.values(screens).forEach(s => s.classList.remove('active'));
@@ -197,25 +251,67 @@ function switchScreen(name) {
 // 合成画面開始（カメラ起動）
 // =====================================
 async function startCompose() {
-    switchScreen('compose');
-
-    // HTTPS でない場合は警告を出すが、カメラ起動は試みる（ブラウザが拒否する）
-    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
-    if (!isSecure) {
-        showToast('カメラを使うにはHTTPS接続が必要です');
+    if (!selectedImageDataUrl) {
+        showToast('先に画像を選択してください');
+        return;
     }
 
+    switchScreen('compose');
+    hideCameraGuide();
+
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+
+    // HTTPS でない場合は警告
+    if (!isSecure) {
+        showCameraGuide('カメラを使うにはHTTPS接続が必要です。ブラウザのアドレスバーに「https://」があるか確認してください。');
+        // カメラなしモードで続行（黒背景）
+        return;
+    }
+
+    // Permissions API で権限状態を確認（可能な場合）
+    if (navigator.permissions && navigator.permissions.query) {
+        try {
+            const status = await navigator.permissions.query({ name: 'camera' });
+            cameraPermissionState = status.state;
+        } catch (e) {
+            cameraPermissionState = 'unknown';
+        }
+    }
+
+    // 毎回 getUserMedia を呼ぶ（ブラウザに権限ダイアログを出させる）
+    await tryStartCamera();
+}
+
+async function tryStartCamera() {
     try {
         await startCamera(videoElement);
+        isCameraActive = true;
         updateExposure();
+        hideCameraGuide();
     } catch (err) {
         console.error('Camera error:', err);
+        isCameraActive = false;
+
         if (err.name === 'NotAllowedError') {
-            showToast('カメラの使用が許可されていません');
+            // 拒否された：OS別ガイダンス
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isAndroid = /Android/.test(navigator.userAgent);
+
+            let guide = '';
+            if (isIOS) {
+                guide = 'カメラへのアクセスが拒否されました。iOSの「設定」→「Safari」→「カメラ」→「許可」に変更してください。';
+            } else if (isAndroid) {
+                guide = 'カメラへのアクセスが拒否されました。Chromeの設定（︙）→「設定」→「サイトの設定」→「カメラ」で許可してください。';
+            } else {
+                guide = 'カメラへのアクセスが拒否されました。ブラウザのアドレスバー横のカメラアイコン🎥をクリックして許可してください。';
+            }
+            showCameraGuide(guide);
         } else if (err.name === 'NotFoundError') {
-            showToast('カメラが見つかりません');
+            showCameraGuide('カメラが見つかりません。フロントカメラのあるデバイスでお試しください。');
+        } else if (err.message === 'HTTPS_REQUIRED') {
+            showCameraGuide('カメラを使うにはHTTPS接続が必要です。');
         } else {
-            showToast('カメラの起動に失敗しました');
+            showCameraGuide('カメラの起動に失敗しました。ページを再読み込みしてお試しください。');
         }
     }
 }
@@ -402,14 +498,24 @@ function setTargetColor(r, g, b) {
 // =====================================
 // 撮影（フレーム + video + overlay + テキスト合成）
 // =====================================
-function takePicture() {
-    if (!videoElement.videoWidth || !processedImageCanvas) {
-        showToast('カメラまたは画像が準備できていません');
+async function takePicture() {
+    if (!processedImageCanvas) {
+        showToast('先に画像を選択してください');
         return;
     }
 
+    // カメラが未起動の場合、再度起動を試みる
+    if (!isCameraActive && videoElement.readyState < 2) {
+        const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+        if (isSecure) {
+            showToast('カメラを起動しています...');
+            await tryStartCamera();
+            // カメラがまだ起動できなかった場合でも、黒背景で続行
+        }
+    }
+
     const frameCanvas = renderFrame({
-        background: videoElement,
+        background: videoElement.readyState >= 2 ? videoElement : null,
         overlay: processedImageCanvas,
         overlayTransform: overlayTransform,
         title: inputTitle.value,
@@ -419,7 +525,7 @@ function takePicture() {
         location: inputLocation.value,
         brightness: parseInt(brightnessSlider.value, 10),
         contrast: parseInt(contrastSlider.value, 10),
-        saturation: 100, // saturationSlider があれば追加可能
+        saturation: 100,
     });
 
     // result-canvas に表示
@@ -450,18 +556,6 @@ function syncFrameTextLayer() {
 function updatePreviewFrame() {
     if (currentScreen !== 'preview' || !resultCanvas.width) return;
 
-    // result-canvas から背景を取得（既に合成済みの画像）
-    // ただしテキストだけ変更する場合、再撮影なしでフレームを再描画するには
-    // カメラ映像を保持している必要がある → 簡易的に再撮影と同じ処理
-    // 実際には video は停止している可能性があるので、result-canvas の内容をベースにテキストだけ上書き
-    const baseCanvas = document.createElement('canvas');
-    baseCanvas.width = resultCanvas.width;
-    baseCanvas.height = resultCanvas.height;
-    baseCanvas.getContext('2d').drawImage(resultCanvas, 0, 0);
-
-    // 白フレーム部分をクリアして再描画（簡易：フル再合成）
-    // 最も確実な方法は takePicture と同じだが video が停止している場合がある
-    // ここでは result-canvas の内容を保持しつつ、テキスト領域だけ白塗り＆再描画
     const ctx = resultCanvas.getContext('2d');
     const W = resultCanvas.width;
     const H = resultCanvas.height;
@@ -472,7 +566,7 @@ function updatePreviewFrame() {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, textAreaTop, W, H - textAreaTop);
 
-    // テキスト再描画（frame-render.js の内部ロジックを簡易再現）
+    // テキスト再描画
     const fontFamily = "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif";
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'bottom';
@@ -747,21 +841,6 @@ function getShareText() {
 }
 
 // =====================================
-// トースト
-// =====================================
-function showToast(message) {
-    let toast = document.querySelector('.toast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.className = 'toast';
-        document.body.appendChild(toast);
-    }
-    toast.textContent = message;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-// =====================================
 // 位置情報取得
 // =====================================
 async function handleGetLocation() {
@@ -891,6 +970,21 @@ function renderThumbnails(thumbs) {
             }
         });
     });
+}
+
+// =====================================
+// トースト
+// =====================================
+function showToast(message) {
+    let toast = document.querySelector('.toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
 // =====================================
