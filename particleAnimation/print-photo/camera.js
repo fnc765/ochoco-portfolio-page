@@ -1,6 +1,5 @@
 /**
  * PrintPhoto - カメラ制御モジュール
- * フェーズ3
  */
 
 let activeStream = null;
@@ -11,9 +10,11 @@ let activeStream = null;
  * @returns {Promise<MediaStream>}
  */
 export async function startCamera(videoElement) {
-    // HTTPSチェック
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-        throw new Error('HTTPS_REQUIRED');
+    // HTTPSチェックは行うが、エラーとしてスローせず警告のみにする
+    // （getUserMedia が呼べない場合はブラウザが自動で拒否する）
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+    if (!isSecure) {
+        console.warn('[PrintPhoto] getUserMedia requires HTTPS. Current:', window.location.protocol);
     }
 
     const constraints = {
@@ -25,12 +26,10 @@ export async function startCamera(videoElement) {
         audio: false,
     };
 
-    // 外カメラがない場合やPCの場合は fallback
     try {
         activeStream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
         if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
-            // facingMode を外して再試行
             activeStream = await navigator.mediaDevices.getUserMedia({
                 video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
                 audio: false,
@@ -63,27 +62,27 @@ export function stopCamera() {
  * @param {HTMLVideoElement} videoElement
  * @param {number} brightness - 50〜150
  * @param {number} contrast - 50〜150
+ * @param {number} saturation - 50〜150
  */
-export function setExposure(videoElement, brightness = 100, contrast = 100) {
-    videoElement.style.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+export function setExposure(videoElement, brightness = 100, contrast = 100, saturation = 100) {
+    videoElement.style.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
 }
 
 /**
- * 現在のストリームを取得（撮影時に使用）
+ * 露光調整用のCSS filter文字列を取得（Canvas合成用）
+ * @param {number} brightness
+ * @param {number} contrast
+ * @param {number} saturation
+ * @returns {string}
+ */
+export function getExposureFilter(brightness = 100, contrast = 100, saturation = 100) {
+    return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
+}
+
+/**
+ * 現在のストリームを取得
  * @returns {MediaStream | null}
  */
 export function getActiveStream() {
     return activeStream;
-}
-
-/**
- * Video要素の現在フレームをCanvasに描画
- * @param {HTMLVideoElement} video
- * @param {HTMLCanvasElement} canvas
- */
-export function captureVideoFrame(video, canvas) {
-    const ctx = canvas.getContext('2d');
-    canvas.width = video.videoWidth || 1920;
-    canvas.height = video.videoHeight || 1080;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 }

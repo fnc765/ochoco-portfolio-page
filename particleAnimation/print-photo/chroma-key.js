@@ -183,3 +183,23 @@ export function rgbToHex(r, g, b) {
 export function rgbToString({ r, g, b }) {
     return `rgb(${r}, ${g}, ${b})`;
 }
+
+/**
+ * Canvasがすでに透過情報を含んでいるかを判定
+ * 全ピクセルのアルファ値が255（不透過）でない場合は透過ありとみなす
+ * @param {HTMLCanvasElement} canvas
+ * @returns {boolean}
+ */
+export function hasTransparency(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    // サンプリングして判定（全ピクセルチェックは重いので間引き）
+    const step = Math.max(1, Math.floor(data.length / 4 / 1000));
+    for (let i = 3; i < data.length; i += 4 * step) {
+        if (data[i] < 255) {
+            return true;
+        }
+    }
+    return false;
+}

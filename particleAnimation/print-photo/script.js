@@ -8,13 +8,14 @@ import {
     applyChromaKeyPreview,
     pickColor,
     rgbToHex,
+    hasTransparency,
 } from './chroma-key.js';
 
 import {
     startCamera,
     stopCamera,
     setExposure,
-    captureVideoFrame,
+    getExposureFilter,
 } from './camera.js';
 
 import { renderFrame } from './frame-render.js';
@@ -198,9 +199,10 @@ function switchScreen(name) {
 async function startCompose() {
     switchScreen('compose');
 
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+    // HTTPS でない場合は警告を出すが、カメラ起動は試みる（ブラウザが拒否する）
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+    if (!isSecure) {
         showToast('カメラを使うにはHTTPS接続が必要です');
-        return;
     }
 
     try {
@@ -208,10 +210,10 @@ async function startCompose() {
         updateExposure();
     } catch (err) {
         console.error('Camera error:', err);
-        if (err.message === 'HTTPS_REQUIRED') {
-            showToast('HTTPS接続が必要です');
-        } else if (err.name === 'NotAllowedError') {
+        if (err.name === 'NotAllowedError') {
             showToast('カメラの使用が許可されていません');
+        } else if (err.name === 'NotFoundError') {
+            showToast('カメラが見つかりません');
         } else {
             showToast('カメラの起動に失敗しました');
         }
@@ -245,14 +247,28 @@ async function handleFileSelect(e) {
 
         try {
             originalImageCanvas = await loadImageToCanvas(selectedImageDataUrl);
-            await renderPreview();
-            // サムネイル保存
+
+            // 透過画像判定（PNG等、すでに透過している場合はクロマキースキップ）
+            const isTransparent = hasTransparency(originalImageCanvas);
+            if (isTransparent) {
+                processedImageCanvas = originalImageCanvas;
+                const ctx = overlayCanvas.getContext('2d');
+                overlayCanvas.width = originalImageCanvas.width;
+                overlayCanvas.height = originalImageCanvas.height;
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                ctx.drawImage(originalImageCanvas, 0, 0);
+                applyOverlayTransform();
+                showToast('透過画像を読み込みました');
+            } else {
+                await renderPreview();
+            }
+
+            // フルサイズDataURLを履歴保存
             try {
-                const blob = await (await fetch(selectedImageDataUrl)).blob();
-                await saveThumbnail(blob);
+                await saveThumbnail(selectedImageDataUrl);
                 await restoreThumbnails();
             } catch (e) {
-                console.warn('Thumbnail save failed:', e);
+                console.warn('History save failed:', e);
             }
         } catch (err) {
             console.error('Image load failed:', err);
@@ -401,6 +417,9 @@ function takePicture() {
         photographer: inputPhotographer.value,
         date: inputDate.value,
         location: inputLocation.value,
+        brightness: parseInt(brightnessSlider.value, 10),
+        contrast: parseInt(contrastSlider.value, 10),
+        saturation: 100, // saturationSlider があれば追加可能
     });
 
     // result-canvas に表示
@@ -817,15 +836,12 @@ function renderThumbnails(thumbs) {
         return;
     }
 
-    grid.innerHTML = thumbs.map(t => {
-        const url = URL.createObjectURL(t.blob);
-        return `
-            <div class="thumbnail-item" data-id="${t.id}">
-                <img src="${url}" alt="履歴画像" loading="lazy">
-                <button class="thumbnail-delete" data-id="${t.id}" aria-label="削除">×</button>
-            </div>
-        `;
-    }).join('');
+    grid.innerHTML = thumbs.map(t => `
+        <div class="thumbnail-item" data-id="${t.id}">
+            <img src="${t.dataUrl}" alt="履歴画像" loading="lazy">
+            <button class="thumbnail-delete" data-id="${t.id}" aria-label="削除">×</button>
+        </div>
+    `).join('');
 
     // 削除ボタン
     grid.querySelectorAll('.thumbnail-delete').forEach(btn => {
@@ -841,10 +857,38 @@ function renderThumbnails(thumbs) {
         });
     });
 
-    // クリックで再選択（ファイルピッカーを開く）
+    // クリックで再選択（IndexedDBから直接読み込み、ファイルピッカー不要）
     grid.querySelectorAll('.thumbnail-item').forEach(item => {
-        item.addEventListener('click', () => {
-            imageInput.click();
+        item.addEventListener('click', async () => {
+            const id = item.dataset.id;
+            try {
+                const dataUrl = await loadThumbnail(id);
+                if (!dataUrl) {
+                    showToast('履歴画像の読み込みに失敗しました');
+                    return;
+                }
+                selectedImageDataUrl = dataUrl;
+                uploadPreview.innerHTML = `<img src="${dataUrl}" alt="選択された画像">`;
+                uploadPreview.classList.add('active');
+                cameraStartBtn.disabled = false;
+
+                originalImageCanvas = await loadImageToCanvas(dataUrl);
+                const isTransparent = hasTransparency(originalImageCanvas);
+                if (isTransparent) {
+                    processedImageCanvas = originalImageCanvas;
+                    const ctx = overlayCanvas.getContext('2d');
+                    overlayCanvas.width = originalImageCanvas.width;
+                    overlayCanvas.height = originalImageCanvas.height;
+                    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                    ctx.drawImage(originalImageCanvas, 0, 0);
+                    applyOverlayTransform();
+                } else {
+                    await renderPreview();
+                }
+            } catch (err) {
+                console.error('Load from history failed:', err);
+                showToast('履歴からの読み込みに失敗しました');
+            }
         });
     });
 }

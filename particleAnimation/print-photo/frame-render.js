@@ -1,6 +1,5 @@
 /**
  * PrintPhoto - フレーム合成/Canvas出力モジュール
- * フェーズ4
  */
 
 const DEFAULT_FRAME_W = 2048;
@@ -24,6 +23,9 @@ const MARGIN_BOTTOM = 36;
  * @param {string} [opts.photographer] - 撮影者
  * @param {string} [opts.date] - 日付
  * @param {string} [opts.location] - 撮影場所
+ * @param {number} [opts.brightness] - 明るさ（50-150）
+ * @param {number} [opts.contrast] - コントラスト（50-150）
+ * @param {number} [opts.saturation] - 彩度（50-150）
  * @param {number} [opts.outputWidth] - 出力幅（デフォルト2048）
  * @param {number} [opts.outputHeight] - 出力高さ（デフォルト1440）
  * @returns {HTMLCanvasElement}
@@ -51,16 +53,23 @@ export function renderFrame(opts) {
     ctx.fillStyle = '#000000';
     ctx.fillRect(px, py, pw, ph);
 
-    // 3. カメラ映像を描画
+    // 3. カメラ映像を描画（露光調整を filter で適用）
     if (opts.background) {
+        ctx.save();
+        const b = opts.brightness ?? 100;
+        const c = opts.contrast ?? 100;
+        const s = opts.saturation ?? 100;
+        if (b !== 100 || c !== 100 || s !== 100) {
+            ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+        }
         ctx.drawImage(opts.background, px, py, pw, ph);
+        ctx.restore();
     }
 
     // 4. 透過画像を変形して重ねる
     if (opts.overlay && opts.overlayTransform) {
         ctx.save();
         const tf = opts.overlayTransform;
-        // overlay のサイズと合成エリアサイズの比率
         const ox = opts.overlay.width;
         const oy = opts.overlay.height;
         const sx = pw / ox;
@@ -83,7 +92,6 @@ function drawFrameText(ctx, opts, scale) {
     ctx.textBaseline = 'bottom';
 
     const textAreaY = Math.round(TEXT_AREA_TOP * scale);
-    const textAreaH = H - textAreaY;
     const marginX = Math.round(MARGIN_X * scale);
     const marginBottom = Math.round(MARGIN_BOTTOM * scale);
     const centerX = W / 2;
@@ -98,7 +106,7 @@ function drawFrameText(ctx, opts, scale) {
         ctx.fillText(opts.title, centerX, bottomY - Math.round(50 * scale));
     }
 
-    // コメント（タイトル下または下部中央）
+    // コメント
     if (opts.comment) {
         const maxCommentW = W - marginX * 2;
         const commentSize = fitFontSize(ctx, opts.comment, maxCommentW, Math.round(40 * scale), fontFamily);
@@ -107,7 +115,6 @@ function drawFrameText(ctx, opts, scale) {
         const commentY = opts.title
             ? bottomY - Math.round(50 * scale) - Math.round(8 * scale)
             : bottomY - Math.round(30 * scale);
-        // 改行対応
         const lines = wrapText(ctx, opts.comment, maxCommentW);
         lines.forEach((line, i) => {
             const lineY = commentY - (lines.length - 1 - i) * (commentSize * 1.3);
@@ -137,9 +144,6 @@ function drawFrameText(ctx, opts, scale) {
     }
 }
 
-/**
- * テキストがmaxWidthに収まる最大フォントサイズを計算
- */
 function fitFontSize(ctx, text, maxWidth, maxSize, fontFamily) {
     let size = maxSize;
     ctx.font = `700 ${size}px ${fontFamily}`;
@@ -150,9 +154,6 @@ function fitFontSize(ctx, text, maxWidth, maxSize, fontFamily) {
     return size;
 }
 
-/**
- * テキストをmaxWidthに収まるように改行分割
- */
 function wrapText(ctx, text, maxWidth) {
     const lines = [];
     const paragraphs = text.split('\n');

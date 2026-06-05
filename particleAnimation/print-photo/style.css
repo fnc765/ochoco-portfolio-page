@@ -15,7 +15,7 @@ html, body {
     background-color: #141414;
     overflow-x: hidden;
     min-height: 100vh;
-    overscroll-behavior-y: none;
+    /* overscroll-behavior-y: none; を削除してスクロールを許可 */
 }
 
 /* ===================================

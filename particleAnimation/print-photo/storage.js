@@ -1,12 +1,11 @@
 /**
  * PrintPhoto - localStorage/IndexedDB管理モジュール
- * フェーズ6
  */
 
 const DB_NAME = 'PrintPhotoDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'thumbnails';
-const MAX_ITEMS = 10;
+const MAX_ITEMS = 5; // 履歴5枚まで
 
 function openDB() {
     return new Promise((resolve, reject) => {
@@ -24,20 +23,20 @@ function openDB() {
 }
 
 /**
- * サムネイルを保存
- * @param {Blob} blob
+ * フルサイズ画像をDataURLとして保存
+ * @param {string} dataUrl - 画像DataURL
  * @returns {Promise<string>} id
  */
-export async function saveThumbnail(blob) {
+export async function saveThumbnail(dataUrl) {
     const db = await openDB();
     const id = `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        store.put({ id, blob, createdAt: Date.now() });
+        store.put({ id, dataUrl, createdAt: Date.now() });
         tx.oncomplete = async () => {
-            await pruneOld(db);
             db.close();
+            await pruneOld();
             resolve(id);
         };
         tx.onerror = () => {
@@ -48,9 +47,9 @@ export async function saveThumbnail(blob) {
 }
 
 /**
- * サムネイルを取得
+ * サムネイルを取得（DataURL）
  * @param {string} id
- * @returns {Promise<Blob|null>}
+ * @returns {Promise<string|null>} DataURLまたはnull
  */
 export async function loadThumbnail(id) {
     const db = await openDB();
@@ -60,7 +59,7 @@ export async function loadThumbnail(id) {
         const req = store.get(id);
         req.onsuccess = () => {
             db.close();
-            resolve(req.result ? req.result.blob : null);
+            resolve(req.result ? req.result.dataUrl : null);
         };
         req.onerror = () => {
             db.close();
@@ -93,7 +92,7 @@ export async function deleteThumbnail(id) {
 
 /**
  * 全サムネイルを取得（新しい順）
- * @returns {Promise<Array<{id:string,blob:Blob,createdAt:number}>>}
+ * @returns {Promise<Array<{id:string,dataUrl:string,createdAt:number}>>}
  */
 export async function getAllThumbnails() {
     const db = await openDB();
@@ -122,7 +121,8 @@ export async function getAllThumbnails() {
 /**
  * 古いサムネイルを削除（上限を維持）
  */
-async function pruneOld(db) {
+async function pruneOld() {
+    const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
@@ -139,10 +139,10 @@ async function pruneOld(db) {
                 cursor.continue();
             } else {
                 toDelete.forEach(id => store.delete(id));
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); reject(tx.error); };
             }
         };
-        req.onerror = () => reject(req.error);
+        req.onerror = () => { db.close(); reject(req.error); };
     });
 }
