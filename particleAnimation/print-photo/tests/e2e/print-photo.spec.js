@@ -64,8 +64,12 @@ test('E-P9: 日付自動入力', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
 
-    const today = new Date().toISOString().slice(0, 10);
-    await expect(page.locator('[data-testid="date-input"]')).toHaveValue(today);
+    // ブラウザ内の日付と一致させる（タイムゾーン差対策）
+    const browserToday = await page.evaluate(() => {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    });
+    await expect(page.locator('[data-testid="date-input"]')).toHaveValue(browserToday);
 });
 
 // =====================================
