@@ -54,7 +54,7 @@ const btnBackTop = document.getElementById('btn-back-top');
 const btnBackCompose = document.getElementById('btn-back-compose');
 const btnShutter = document.getElementById('btn-shutter');
 
-const videoElement = document.getElementById('camera-video');
+let videoElement = document.getElementById('camera-video');
 const overlayCanvas = document.getElementById('overlay-canvas');
 const frameContent = document.getElementById('frame-content');
 
@@ -108,6 +108,7 @@ let isCameraActive = false;
 
 /**
  * カメラストリームを確実に停止し、videoElement も解放する
+ * Android Chrome 対策：video 要素を DOM から削除して新規作成する核のリセット
  */
 function stopCameraInternal() {
     addDebugLog('stopCameraInternal', {
@@ -122,6 +123,7 @@ function stopCameraInternal() {
     });
 
     try {
+        // 1. トラック停止
         if (videoElement.srcObject) {
             videoElement.pause();
             videoElement.srcObject.getTracks().forEach(track => {
@@ -138,6 +140,30 @@ function stopCameraInternal() {
         videoElement.load();
         stopCamera(); // camera.js 側の activeStream も停止
         isCameraActive = false;
+
+        // 2. 核のリセット：video 要素を DOM から削除して新規作成（Android Chrome の頑固なカメラ保持対策）
+        const parent = videoElement.parentNode;
+        const nextSibling = videoElement.nextSibling;
+        if (parent) {
+            const oldId = videoElement.id;
+            const oldClass = videoElement.className;
+            parent.removeChild(videoElement);
+            const newVideo = document.createElement('video');
+            newVideo.id = oldId;
+            newVideo.className = oldClass;
+            newVideo.autoplay = true;
+            newVideo.playsInline = true;
+            newVideo.muted = true;
+            newVideo.setAttribute('webkit-playsinline', '');
+            if (nextSibling) {
+                parent.insertBefore(newVideo, nextSibling);
+            } else {
+                parent.appendChild(newVideo);
+            }
+            // script.js 内の videoElement 参照を更新
+            videoElement = newVideo;
+            addDebugLog('stopCameraInternal-video-reset', { newVideoId: videoElement.id, parentId: parent.id });
+        }
     } catch (e) {
         addDebugLog('stopCameraInternal-error', { message: e.message, stack: e.stack });
     }
