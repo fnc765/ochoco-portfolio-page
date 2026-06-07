@@ -719,9 +719,9 @@ async function takePicture() {
     const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
 
     // CSS 表示サイズを取得（プレビューと合成の一致用）
-    const frameContentRect = frameContent ? frameContent.getBoundingClientRect() : null;
-    const bgDisplayW = frameContentRect ? frameContentRect.width : 0;
-    const bgDisplayH = frameContentRect ? frameContentRect.height : 0;
+    // video要素のclientWidth/clientHeightを優先（object-fit: coverと同じ計算基準にする）
+    const bgDisplayW = videoElement.clientWidth || (frameContent ? frameContent.offsetWidth : 0);
+    const bgDisplayH = videoElement.clientHeight || (frameContent ? frameContent.offsetHeight : 0);
 
     // カメラ映像サイズをデバッグログ（縦撮り問題の調査用）
     const videoW = videoElement.videoWidth || 0;
