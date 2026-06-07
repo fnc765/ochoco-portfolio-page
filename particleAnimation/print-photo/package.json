@@ -8,7 +8,7 @@
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "serve": "npx http-server ./ -p 8080 -s"
+    "serve": "node -e \"const {execSync}=require('child_process');const fs=require('fs');try{const hash=execSync('git rev-parse --short HEAD',{encoding:'utf8'}).trim();fs.writeFileSync('version.json',JSON.stringify({commit:hash,date:new Date().toISOString()}));}catch(e){fs.writeFileSync('version.json',JSON.stringify({commit:'unknown',date:new Date().toISOString()}));}\" && npx http-server ./ -p 8080 -s"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0",

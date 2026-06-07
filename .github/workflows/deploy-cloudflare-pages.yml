@@ -166,6 +166,16 @@ jobs:
           printf '\n[[r2_buckets]]\nbinding = "IMAGES"\nbucket_name = "%s"\n' "$BUCKET_NAME" >> particleAnimation/wrangler.toml
           echo "wrangler.toml に R2 バインディング追加完了 (bucket=$BUCKET_NAME)"
 
+      - name: Generate version.json for print-photo
+        run: |
+          COMMIT_HASH="${{ github.sha }}"
+          SHORT_HASH="${COMMIT_HASH:0:7}"
+          DATE_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > particleAnimation/print-photo/version.json <<EOF
+          {"commit":"${SHORT_HASH}","date":"${DATE_ISO}"}
+          EOF
+          echo "version.json generated: commit=${SHORT_HASH}"
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

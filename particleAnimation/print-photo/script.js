@@ -123,6 +123,24 @@ function init() {
     restoreThumbnails();
     checkEnvironment();
     bindEvents();
+    loadGitCommit();
+}
+
+// =====================================
+// Git コミットハッシュ表示
+// =====================================
+async function loadGitCommit() {
+    try {
+        const response = await fetch('version.json');
+        if (!response.ok) return;
+        const data = await response.json();
+        const el = document.getElementById('git-commit');
+        if (el && data.commit) {
+            el.textContent = `commit: ${data.commit}`;
+        }
+    } catch (e) {
+        // ローカル開発時やファイル不在時は静かに無視
+    }
 }
 
 // =====================================
