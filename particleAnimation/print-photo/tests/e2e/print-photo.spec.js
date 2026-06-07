@@ -58,6 +58,71 @@ test('E-P3: カメラ起動モック', async ({ page }) => {
 });
 
 // =====================================
+// 撮影後デバッグログ確認
+// =====================================
+test('E-P10: 撮影後デバッグログが表示される', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+
+    const input = page.locator('[data-testid="image-input"]');
+    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
+
+    // 画像処理が完了するまで待機
+    await page.waitForTimeout(500);
+
+    await page.click('[data-testid="camera-start-btn"]');
+    await expect(page.locator('#screen-compose')).toBeVisible();
+
+    // カメラ映像が準備できるまで待機（モックでも readyState >= 2 になるのを待つ）
+    await page.waitForTimeout(500);
+
+    await page.click('[data-testid="shutter-btn"]');
+    await expect(page.locator('#screen-preview')).toBeVisible();
+
+    // デバッグパネルが表示される
+    const debugPanel = page.locator('#debug-panel');
+    await expect(debugPanel).toBeVisible();
+
+    // スクリーンショットを撮影して視覚的に確認
+    await page.screenshot({ path: 'tests/e2e/test-results/debug-panel-visible.png', fullPage: true });
+
+    // デバッグログに takePicture の内容が含まれる
+    const debugLog = page.locator('#debug-log');
+    await expect(debugLog).toHaveValue(/takePicture/);
+});
+
+test('E-P16: デプロイ後のURLでデバッグログが表示される', async ({ page }) => {
+    await page.goto('https://ochoco-portfolio.pages.dev/print-photo/');
+    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+
+    const input = page.locator('[data-testid="image-input"]');
+    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
+
+    // 画像処理が完了するまで待機
+    await page.waitForTimeout(500);
+
+    await page.click('[data-testid="camera-start-btn"]');
+    await expect(page.locator('#screen-compose')).toBeVisible();
+
+    // カメラ映像が準備できるまで待機
+    await page.waitForTimeout(500);
+
+    await page.click('[data-testid="shutter-btn"]');
+    await expect(page.locator('#screen-preview')).toBeVisible();
+
+    // デバッグパネルが表示される
+    const debugPanel = page.locator('#debug-panel');
+    await expect(debugPanel).toBeVisible();
+
+    // スクリーンショットを撮影して視覚的に確認
+    await page.screenshot({ path: 'tests/e2e/test-results/deploy-debug-panel.png', fullPage: true });
+
+    // デバッグログに takePicture の内容が含まれる
+    const debugLog = page.locator('#debug-log');
+    await expect(debugLog).toHaveValue(/takePicture/);
+});
+
+// =====================================
 // テキスト入力・プレビュー
 // =====================================
 test('E-P9: 日付自動入力', async ({ page }) => {

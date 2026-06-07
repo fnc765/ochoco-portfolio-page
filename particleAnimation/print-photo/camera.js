@@ -89,3 +89,12 @@ export function getExposureFilter(brightness = 100, contrast = 100, saturation =
 export function getActiveStream() {
     return activeStream;
 }
+
+/**
+ * 外部から取得したストリームを activeStream として登録する
+ * （script.js 側で直接 getUserMedia した場合の同期用）
+ * @param {MediaStream | null} stream
+ */
+export function setActiveStream(stream) {
+    activeStream = stream;
+}

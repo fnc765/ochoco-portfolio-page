@@ -14,6 +14,7 @@ import {
 import {
     startCamera,
     stopCamera,
+    setActiveStream,
 } from './camera.js';
 
 import { renderFrame } from './frame-render.js';
@@ -104,6 +105,18 @@ let pinchStartScale = 1;
 // カメラ状態
 let cameraPermissionState = 'prompt'; // 'granted' | 'denied' | 'prompt' | 'unknown'
 let isCameraActive = false;
+
+/**
+ * カメラストリームを確実に停止し、videoElement も解放する
+ */
+function stopCameraInternal() {
+    if (videoElement.srcObject) {
+        videoElement.srcObject.getTracks().forEach(track => track.stop());
+        videoElement.srcObject = null;
+    }
+    stopCamera(); // camera.js 側の activeStream も停止
+    isCameraActive = false;
+}
 
 // デバッグログ蓄積
 const debugLogs = [];
@@ -283,16 +296,30 @@ function bindEvents() {
     if (btnCopyDebug) {
         btnCopyDebug.addEventListener('click', copyDebugLogs);
     }
+
+    // ページ非表示（別タブ・別アプリ・画面OFF）時にカメラを停止
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && isCameraActive) {
+            stopCameraInternal();
+            addDebugLog('visibilitychange', { action: 'stop-camera', reason: 'page-hidden' });
+        }
+    });
+
+    // ページ離脱時の保険（バックグラウンド遷移・タブ切替・ブラウザ閉じる等）
+    window.addEventListener('pagehide', () => {
+        if (isCameraActive) {
+            stopCameraInternal();
+        }
+    });
 }
 
 // =====================================
 // 画面遷移
 // =====================================
 function switchScreen(name) {
-    // カメラ停止（トップに戻る時）
-    if (name === 'top' && currentScreen === 'compose') {
-        stopCamera();
-        isCameraActive = false;
+    // カメラ停止（トップに戻る時・プレビューに移動する時）
+    if ((name === 'top' && currentScreen === 'compose') || (name === 'preview' && currentScreen === 'compose')) {
+        stopCameraInternal();
     }
 
     Object.values(screens).forEach(s => s.classList.remove('active'));
@@ -455,6 +482,7 @@ function onCameraSuccess(stream) {
     videoElement.onloadedmetadata = () => {
         videoElement.play().catch(() => {});
     };
+    setActiveStream(stream); // camera.js 側と同期
     isCameraActive = true;
     updateExposure();
     hideCameraGuide();
@@ -693,6 +721,35 @@ function setTargetColor(r, g, b) {
     colorDot.style.background = rgbToHex(r, g, b);
     colorValue.textContent = `R:${r} G:${g} B:${b}`;
     renderPreview();
+}
+
+// =====================================
+// カメラ再起動（撮影時に未起動だった場合の救済）
+// =====================================
+async function tryStartCamera() {
+    try {
+        const constraints = {
+            video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+            },
+            audio: false,
+        };
+        let stream = await navigator.mediaDevices.getUserMedia(constraints);
+        onCameraSuccess(stream);
+    } catch (err) {
+        if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+            const fallbackConstraints = {
+                video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+                audio: false,
+            };
+            let stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+            onCameraSuccess(stream);
+        } else {
+            console.error('[PrintPhoto] tryStartCamera failed:', err);
+        }
+    }
 }
 
 // =====================================
