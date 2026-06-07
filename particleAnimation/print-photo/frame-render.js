@@ -23,10 +23,28 @@ const MARGIN_BOTTOM = 36;
  * @param {number} dh
  */
 export function drawImageCover(ctx, img, dx, dy, dw, dh) {
-    const imgW = img.videoWidth || img.naturalWidth || img.width;
-    const imgH = img.videoHeight || img.naturalHeight || img.height;
+    let imgW = img.videoWidth || img.naturalWidth || img.width;
+    let imgH = img.videoHeight || img.naturalHeight || img.height;
+
+    // video 要素の場合、videoWidth/videoHeight が 0 になることがあるので
+    // getVideoTracks().getSettings() からもサイズを取得する
+    if ((!imgW || !imgH) && img.srcObject && img.srcObject.getVideoTracks) {
+        try {
+            const tracks = img.srcObject.getVideoTracks();
+            if (tracks.length > 0) {
+                const settings = tracks[0].getSettings();
+                if (settings.width && settings.height) {
+                    imgW = settings.width;
+                    imgH = settings.height;
+                }
+            }
+        } catch (e) {
+            // フォールバック：無視して次へ
+        }
+    }
+
     if (!imgW || !imgH) {
-        // 画像サイズが取得できない場合は通常の drawImage
+        console.warn('[drawImageCover] 画像サイズが取得できないため fill で描画します', img);
         ctx.drawImage(img, dx, dy, dw, dh);
         return;
     }
@@ -36,13 +54,13 @@ export function drawImageCover(ctx, img, dx, dy, dw, dh) {
 
     let sx, sy, sw, sh;
     if (srcAspect > destAspect) {
-        // 画像が横長：横を切り取る
+        // 画像が相対的に横長 → 横を切り取る
         sh = imgH;
         sw = imgH * destAspect;
         sx = (imgW - sw) / 2;
         sy = 0;
     } else {
-        // 画像が縦長：縦を切り取る
+        // 画像が相対的に縦長 → 縦を切り取る
         sw = imgW;
         sh = imgW / destAspect;
         sx = 0;

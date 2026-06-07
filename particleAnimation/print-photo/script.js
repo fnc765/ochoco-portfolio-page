@@ -671,6 +671,18 @@ async function takePicture() {
     const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
     const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
 
+    // カメラ映像サイズをデバッグログ（縦撮り問題の調査用）
+    const videoW = videoElement.videoWidth || 0;
+    const videoH = videoElement.videoHeight || 0;
+    console.log('[PrintPhoto] takePicture:', {
+        videoReadyState: videoElement.readyState,
+        videoSize: { w: videoW, h: videoH },
+        videoDisplay: { w: videoElement.clientWidth, h: videoElement.clientHeight },
+        overlaySize: { w: processedImageCanvas.width, h: processedImageCanvas.height },
+        overlayCss: { w: overlayCssWidth, h: overlayCssHeight },
+        overlayTransform,
+    });
+
     const frameCanvas = renderFrame({
         background: videoElement.readyState >= 2 ? videoElement : null,
         overlay: processedImageCanvas,
