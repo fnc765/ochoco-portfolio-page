@@ -110,12 +110,32 @@ let isCameraActive = false;
  * カメラストリームを確実に停止し、videoElement も解放する
  */
 function stopCameraInternal() {
+    addDebugLog('stopCameraInternal', {
+        before: {
+            srcObject: !!videoElement.srcObject,
+            isCameraActive,
+            readyState: videoElement.readyState,
+            videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
+            tracks: videoElement.srcObject ? videoElement.srcObject.getTracks().map(t => ({ kind: t.kind, label: t.label, enabled: t.enabled, readyState: t.readyState })) : null,
+        },
+    });
+
     if (videoElement.srcObject) {
+        videoElement.pause();
         videoElement.srcObject.getTracks().forEach(track => track.stop());
         videoElement.srcObject = null;
+        videoElement.load();
     }
     stopCamera(); // camera.js 側の activeStream も停止
     isCameraActive = false;
+
+    addDebugLog('stopCameraInternal', {
+        after: {
+            srcObject: !!videoElement.srcObject,
+            isCameraActive,
+            readyState: videoElement.readyState,
+        },
+    });
 }
 
 // デバッグログ蓄積
@@ -299,6 +319,7 @@ function bindEvents() {
 
     // ページ非表示（別タブ・別アプリ・画面OFF）時にカメラを停止
     document.addEventListener('visibilitychange', () => {
+        addDebugLog('visibilitychange', { hidden: document.hidden, isCameraActive, visibilityState: document.visibilityState });
         if (document.hidden && isCameraActive) {
             stopCameraInternal();
             addDebugLog('visibilitychange', { action: 'stop-camera', reason: 'page-hidden' });
@@ -317,6 +338,7 @@ function bindEvents() {
 // 画面遷移
 // =====================================
 function switchScreen(name) {
+    addDebugLog('switchScreen', { from: currentScreen, to: name });
     // カメラ停止（トップに戻る時・プレビューに移動する時）
     if ((name === 'top' && currentScreen === 'compose') || (name === 'preview' && currentScreen === 'compose')) {
         stopCameraInternal();
@@ -833,7 +855,9 @@ async function takePicture() {
     // フレームテキストレイヤーを同期（合成画面用）
     syncFrameTextLayer();
 
+    addDebugLog('takePicture-before-switch', { isCameraActive, srcObject: !!videoElement.srcObject, currentScreen });
     switchScreen('preview');
+    addDebugLog('takePicture-after-switch', { currentScreen, isCameraActive, srcObject: !!videoElement.srcObject });
 }
 
 // =====================================
