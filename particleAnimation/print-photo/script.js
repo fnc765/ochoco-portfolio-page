@@ -443,23 +443,11 @@ function onCameraSuccess(stream) {
     isCameraActive = true;
     updateExposure();
     hideCameraGuide();
-
-    // デバッグパネルを表示
-    const debugPanel = document.getElementById('debug-panel');
-    if (debugPanel) {
-        debugPanel.classList.add('active');
-    }
 }
 
 function onCameraError(err) {
     console.error('[PrintPhoto] Camera error:', err.name, err.message);
     isCameraActive = false;
-
-    // デバッグパネルを非表示
-    const debugPanel = document.getElementById('debug-panel');
-    if (debugPanel) {
-        debugPanel.classList.remove('active');
-    }
 
     // エラー時はトップ画面に戻してガイドを表示（compose画面ではガイドが見えない）
     switchScreen('top');
@@ -772,6 +760,12 @@ async function takePicture() {
 
     // フレームテキストレイヤーを同期（合成画面用）
     syncFrameTextLayer();
+
+    // デバッグパネルを表示（プレビュー画面に移動したので）
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+        debugPanel.classList.add('active');
+    }
 
     switchScreen('preview');
 }
