@@ -671,13 +671,33 @@ async function takePicture() {
     const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
     const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
 
+    // CSS 表示サイズを取得（プレビューと合成の一致用）
+    const frameContentRect = frameContent ? frameContent.getBoundingClientRect() : null;
+    const bgDisplayW = frameContentRect ? frameContentRect.width : 0;
+    const bgDisplayH = frameContentRect ? frameContentRect.height : 0;
+
     // カメラ映像サイズをデバッグログ（縦撮り問題の調査用）
     const videoW = videoElement.videoWidth || 0;
     const videoH = videoElement.videoHeight || 0;
+    let settingsW = null;
+    let settingsH = null;
+    try {
+        const tracks = videoElement.srcObject?.getVideoTracks?.();
+        if (tracks && tracks.length > 0) {
+            const s = tracks[0].getSettings();
+            settingsW = s.width;
+            settingsH = s.height;
+        }
+    } catch (e) {}
+
+    const isPortrait = window.innerHeight > window.innerWidth;
     console.log('[PrintPhoto] takePicture:', {
         videoReadyState: videoElement.readyState,
         videoSize: { w: videoW, h: videoH },
         videoDisplay: { w: videoElement.clientWidth, h: videoElement.clientHeight },
+        videoSettings: { w: settingsW, h: settingsH },
+        isPortrait,
+        frameContent: { w: bgDisplayW, h: bgDisplayH },
         overlaySize: { w: processedImageCanvas.width, h: processedImageCanvas.height },
         overlayCss: { w: overlayCssWidth, h: overlayCssHeight },
         overlayTransform,
@@ -685,6 +705,8 @@ async function takePicture() {
 
     const frameCanvas = renderFrame({
         background: videoElement.readyState >= 2 ? videoElement : null,
+        backgroundDisplayWidth: bgDisplayW,
+        backgroundDisplayHeight: bgDisplayH,
         overlay: processedImageCanvas,
         overlayTransform: overlayTransform,
         overlayCssWidth: overlayCssWidth,

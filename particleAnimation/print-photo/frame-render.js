@@ -22,34 +22,67 @@ const MARGIN_BOTTOM = 36;
  * @param {number} dw
  * @param {number} dh
  */
-export function drawImageCover(ctx, img, dx, dy, dw, dh) {
+export function drawImageCover(ctx, img, dx, dy, dw, dh, displayW, displayH) {
     let imgW = img.videoWidth || img.naturalWidth || img.width;
     let imgH = img.videoHeight || img.naturalHeight || img.height;
+    let settingsW = null;
+    let settingsH = null;
 
-    // video 要素の場合、videoWidth/videoHeight が 0 になることがあるので
-    // getVideoTracks().getSettings() からもサイズを取得する
-    if ((!imgW || !imgH) && img.srcObject && img.srcObject.getVideoTracks) {
+    // video 要素の場合、getSettings() からもサイズを取得
+    if (img.srcObject && img.srcObject.getVideoTracks) {
         try {
             const tracks = img.srcObject.getVideoTracks();
             if (tracks.length > 0) {
                 const settings = tracks[0].getSettings();
-                if (settings.width && settings.height) {
-                    imgW = settings.width;
-                    imgH = settings.height;
-                }
+                settingsW = settings.width;
+                settingsH = settings.height;
             }
         } catch (e) {
-            // フォールバック：無視して次へ
+            // フォールバック：無視
+        }
+    }
+
+    // videoWidth/videoHeight が 0 の場合は getSettings() をフォールバック
+    if ((!imgW || !imgH) && settingsW && settingsH) {
+        imgW = settingsW;
+        imgH = settingsH;
+    }
+
+    // デバイスの向きと videoWidth/videoHeight の整合性を確認
+    // 縦持ち(portrait)なのに videoWidth > videoHeight → 回転前の値を返している可能性
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const videoAspect = (imgW && imgH) ? imgW / imgH : 0;
+    const settingsAspect = (settingsW && settingsH) ? settingsW / settingsH : 0;
+
+    if (isPortrait && videoAspect > 1) {
+        // 縦持ちなのに横長判定 → getSettings() が縦長ならそちらを使う
+        if (settingsAspect && settingsAspect < 1) {
+            imgW = settingsW;
+            imgH = settingsH;
+        } else {
+            // 両方横長ならスワップして縦長に矯正
+            [imgW, imgH] = [imgH, imgW];
+        }
+    } else if (!isPortrait && videoAspect < 1) {
+        // 横持ちなのに縦長判定 → getSettings() が横長ならそちらを使う
+        if (settingsAspect && settingsAspect > 1) {
+            imgW = settingsW;
+            imgH = settingsH;
+        } else {
+            // 両方縦長ならスワップして横長に矯正
+            [imgW, imgH] = [imgH, imgW];
         }
     }
 
     if (!imgW || !imgH) {
-        console.warn('[drawImageCover] 画像サイズが取得できないため fill で描画します', img);
+        console.warn('[drawImageCover] 画像サイズが取得できないため fill で描画', img);
         ctx.drawImage(img, dx, dy, dw, dh);
         return;
     }
 
-    const destAspect = dw / dh;
+    // CSS object-fit: cover と同じ計算
+    // displayW/displayH があれば CSS 表示サイズを優先（プレビューと一致させる）
+    const destAspect = (displayW || dw) / (displayH || dh);
     const srcAspect = imgW / imgH;
 
     let sx, sy, sw, sh;
@@ -66,6 +99,12 @@ export function drawImageCover(ctx, img, dx, dy, dw, dh) {
         sx = 0;
         sy = (imgH - sh) / 2;
     }
+
+    console.log('[drawImageCover]', {
+        imgW, imgH, srcAspect, destAspect,
+        isPortrait, videoAspect, settingsAspect,
+        sx, sy, sw, sh, dx, dy, dw, dh,
+    });
 
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 }
@@ -113,7 +152,10 @@ export function renderFrame(opts) {
 
     // 3. カメラ映像を描画（object-fit: cover と同じ中央トリミング）
     if (opts.background) {
-        drawImageCover(ctx, opts.background, px, py, pw, ph);
+        drawImageCover(
+            ctx, opts.background, px, py, pw, ph,
+            opts.backgroundDisplayWidth, opts.backgroundDisplayHeight
+        );
     }
 
     // 4. 透過画像を変形して重ねる（明るさ・コントラスト調整を適用）
