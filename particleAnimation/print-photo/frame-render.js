@@ -13,6 +13,46 @@ const MARGIN_X = 48;
 const MARGIN_BOTTOM = 36;
 
 /**
+ * object-fit: cover と同じ挙動で Canvas に画像を描画する
+ * ソース画像の中央を切り取り、デスティネーション矩形にフィットさせる
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLCanvasElement | HTMLVideoElement | HTMLImageElement} img
+ * @param {number} dx
+ * @param {number} dy
+ * @param {number} dw
+ * @param {number} dh
+ */
+export function drawImageCover(ctx, img, dx, dy, dw, dh) {
+    const imgW = img.videoWidth || img.naturalWidth || img.width;
+    const imgH = img.videoHeight || img.naturalHeight || img.height;
+    if (!imgW || !imgH) {
+        // 画像サイズが取得できない場合は通常の drawImage
+        ctx.drawImage(img, dx, dy, dw, dh);
+        return;
+    }
+
+    const destAspect = dw / dh;
+    const srcAspect = imgW / imgH;
+
+    let sx, sy, sw, sh;
+    if (srcAspect > destAspect) {
+        // 画像が横長：横を切り取る
+        sh = imgH;
+        sw = imgH * destAspect;
+        sx = (imgW - sw) / 2;
+        sy = 0;
+    } else {
+        // 画像が縦長：縦を切り取る
+        sw = imgW;
+        sh = imgW / destAspect;
+        sx = 0;
+        sy = (imgH - sh) / 2;
+    }
+
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+/**
  * フレーム付き合成画像を描画する
  * @param {Object} opts
  * @param {HTMLCanvasElement | HTMLVideoElement} opts.background - カメラ映像または背景Canvas
@@ -53,9 +93,9 @@ export function renderFrame(opts) {
     ctx.fillStyle = '#000000';
     ctx.fillRect(px, py, pw, ph);
 
-    // 3. カメラ映像を描画
+    // 3. カメラ映像を描画（object-fit: cover と同じ中央トリミング）
     if (opts.background) {
-        ctx.drawImage(opts.background, px, py, pw, ph);
+        drawImageCover(ctx, opts.background, px, py, pw, ph);
     }
 
     // 4. 透過画像を変形して重ねる（明るさ・コントラスト調整を適用）

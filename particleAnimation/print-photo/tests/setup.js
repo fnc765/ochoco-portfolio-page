@@ -32,22 +32,34 @@ class MockCanvasRenderingContext2D {
         }
     }
 
-    drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) {
-        // 簡易: ソース全体をコピー
+    drawImage(img, a, b, c, d, e, f, g, h) {
+        // 簡易: ソース切り出しに対応したコピー
         if (img instanceof MockCanvasElement) {
             const srcCtx = img.getContext('2d');
             const srcData = srcCtx.getImageData(0, 0, img.width, img.height);
             const ctx = this;
-            const destW = dw !== undefined ? dw : img.width;
-            const destH = dh !== undefined ? dh : img.height;
-            const startX = dx !== undefined ? dx : sx;
-            const startY = dy !== undefined ? dy : sy;
+
+            const is9 = typeof h === 'number';
+            const is5 = typeof c === 'number' && !is9;
+
+            let srcX, srcY, srcW, srcH, destX, destY, destW, destH;
+            if (is9) {
+                srcX = a; srcY = b; srcW = c; srcH = d;
+                destX = e; destY = f; destW = g; destH = h;
+            } else if (is5) {
+                srcX = 0; srcY = 0; srcW = img.width; srcH = img.height;
+                destX = a; destY = b; destW = c; destH = d;
+            } else {
+                srcX = 0; srcY = 0; srcW = img.width; srcH = img.height;
+                destX = a; destY = b; destW = img.width; destH = img.height;
+            }
+
             for (let y = 0; y < destH; y++) {
                 for (let x = 0; x < destW; x++) {
-                    const srcX = Math.floor((x / destW) * img.width);
-                    const srcY = Math.floor((y / destH) * img.height);
-                    const sIdx = (srcY * img.width + srcX) * 4;
-                    const dIdx = ((startY + y) * ctx.width + (startX + x)) * 4;
+                    const srcPixelX = Math.floor((x / destW) * srcW + srcX);
+                    const srcPixelY = Math.floor((y / destH) * srcH + srcY);
+                    const sIdx = (srcPixelY * img.width + srcPixelX) * 4;
+                    const dIdx = ((destY + y) * ctx.width + (destX + x)) * 4;
                     if (dIdx >= 0 && dIdx < ctx._data.data.length) {
                         ctx._data.data[dIdx] = srcData.data[sIdx];
                         ctx._data.data[dIdx + 1] = srcData.data[sIdx + 1];
@@ -124,7 +136,13 @@ class MockCanvasElement {
         this._ctx = new MockCanvasRenderingContext2D(width, height);
     }
     getContext(type) {
-        if (type === '2d') return this._ctx;
+        if (type === '2d') {
+            // width/height が変更された場合はコンテキストを再作成
+            if (this._ctx.width !== this.width || this._ctx.height !== this.height) {
+                this._ctx = new MockCanvasRenderingContext2D(this.width, this.height);
+            }
+            return this._ctx;
+        }
         return null;
     }
     toBlob(callback, type, quality) {

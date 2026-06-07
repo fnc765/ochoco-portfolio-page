@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { renderFrame } from '../../frame-render.js';
+import { renderFrame, drawImageCover } from '../../frame-render.js';
 
 describe('frame-render', () => {
     it('U-F1: フレーム座標計算（出力サイズ2048x1440）', () => {
@@ -61,5 +61,54 @@ describe('frame-render', () => {
         // 出力サイズがフレームサイズを超えないことを確認
         expect(result.width).toBeLessThanOrEqual(2048);
         expect(result.height).toBeLessThanOrEqual(1440);
+    });
+
+    it('U-F6: drawImageCover で縦長画像を横長エリアに cover 描画', () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1920;
+        canvas.height = 1080;
+        const ctx = canvas.getContext('2d');
+
+        // 縦長画像 (1080x1920) を作成
+        const portraitImg = document.createElement('canvas');
+        portraitImg.width = 1080;
+        portraitImg.height = 1920;
+        const imgCtx = portraitImg.getContext('2d');
+        imgCtx.fillStyle = '#ff0000';
+        imgCtx.fillRect(0, 0, 1080, 1920);
+
+        // 横長エリア (1920x1080) に cover 描画
+        drawImageCover(ctx, portraitImg, 0, 0, 1920, 1080);
+
+        // 描画後のピクセル検証：中央部分が描画されていることを確認
+        // 縦長画像を横長エリアに cover すると、上下が切り取られ中央部分が描画される
+        const centerPixel = ctx.getImageData(960, 540, 1, 1).data;
+        expect(centerPixel[0]).toBe(255); // R
+        expect(centerPixel[1]).toBe(0);   // G
+        expect(centerPixel[2]).toBe(0);   // B
+    });
+
+    it('U-F7: drawImageCover で横長画像を縦長エリアに cover 描画', () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1920;
+        const ctx = canvas.getContext('2d');
+
+        // 横長画像 (1920x1080) を作成
+        const landscapeImg = document.createElement('canvas');
+        landscapeImg.width = 1920;
+        landscapeImg.height = 1080;
+        const imgCtx = landscapeImg.getContext('2d');
+        imgCtx.fillStyle = '#00ff00';
+        imgCtx.fillRect(0, 0, 1920, 1080);
+
+        // 縦長エリア (1080x1920) に cover 描画
+        drawImageCover(ctx, landscapeImg, 0, 0, 1080, 1920);
+
+        // 描画後のピクセル検証：中央部分が描画されていることを確認
+        const centerPixel = ctx.getImageData(540, 960, 1, 1).data;
+        expect(centerPixel[0]).toBe(0);   // R
+        expect(centerPixel[1]).toBe(255); // G
+        expect(centerPixel[2]).toBe(0);   // B
     });
 });
