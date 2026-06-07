@@ -115,6 +115,7 @@ function stopCameraInternal() {
             srcObject: !!videoElement.srcObject,
             isCameraActive,
             readyState: videoElement.readyState,
+            paused: videoElement.paused,
             videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
             tracks: videoElement.srcObject ? videoElement.srcObject.getTracks().map(t => ({ kind: t.kind, label: t.label, enabled: t.enabled, readyState: t.readyState })) : null,
         },
@@ -122,7 +123,21 @@ function stopCameraInternal() {
 
     if (videoElement.srcObject) {
         videoElement.pause();
-        videoElement.srcObject.getTracks().forEach(track => track.stop());
+        // enabled=false を先に設定してから stop する（Chrome mobile の確実な解放）
+        videoElement.srcObject.getTracks().forEach(track => {
+            track.enabled = false;
+            try {
+                track.stop();
+            } catch (e) {
+                addDebugLog('track-stop-error', { label: track.label, error: e.message });
+            }
+        });
+        // srcObject を明示的に空の MediaStream → null へと段階的に解除（Chrome 対策）
+        try {
+            videoElement.srcObject = new MediaStream();
+        } catch (e) {
+            // 無視
+        }
         videoElement.srcObject = null;
         videoElement.load();
     }
@@ -134,6 +149,7 @@ function stopCameraInternal() {
             srcObject: !!videoElement.srcObject,
             isCameraActive,
             readyState: videoElement.readyState,
+            paused: videoElement.paused,
         },
     });
 }
@@ -339,8 +355,8 @@ function bindEvents() {
 // =====================================
 function switchScreen(name) {
     addDebugLog('switchScreen', { from: currentScreen, to: name });
-    // カメラ停止（トップに戻る時・プレビューに移動する時）
-    if ((name === 'top' && currentScreen === 'compose') || (name === 'preview' && currentScreen === 'compose')) {
+    // カメラ停止（compose 以外に遷移する時は必ず停止）
+    if (currentScreen === 'compose' && name !== 'compose') {
         stopCameraInternal();
     }
 
@@ -783,81 +799,93 @@ async function takePicture() {
         return;
     }
 
-    // カメラが未起動の場合、再度起動を試みる
-    if (!isCameraActive && videoElement.readyState < 2) {
-        const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
-        if (isSecure) {
-            showToast('カメラを起動しています...');
-            await tryStartCamera();
-            // カメラがまだ起動できなかった場合でも、黒背景で続行
-        }
-    }
-
-    const frameContent = document.getElementById('frame-content');
-    const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
-    const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
-
-    // CSS 表示サイズを取得（プレビューと合成の一致用）
-    // video要素のclientWidth/clientHeightを優先（object-fit: coverと同じ計算基準にする）
-    const bgDisplayW = videoElement.clientWidth || (frameContent ? frameContent.offsetWidth : 0);
-    const bgDisplayH = videoElement.clientHeight || (frameContent ? frameContent.offsetHeight : 0);
-
-    // カメラ映像サイズをデバッグログ（縦撮り問題の調査用）
-    const videoW = videoElement.videoWidth || 0;
-    const videoH = videoElement.videoHeight || 0;
-    let settingsW = null;
-    let settingsH = null;
     try {
-        const tracks = videoElement.srcObject?.getVideoTracks?.();
-        if (tracks && tracks.length > 0) {
-            const s = tracks[0].getSettings();
-            settingsW = s.width;
-            settingsH = s.height;
+        // カメラが未起動の場合、再度起動を試みる
+        if (!isCameraActive && videoElement.readyState < 2) {
+            const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+            if (isSecure) {
+                showToast('カメラを起動しています...');
+                await tryStartCamera();
+                // カメラがまだ起動できなかった場合でも、黒背景で続行
+            }
         }
-    } catch (e) {}
 
-    const isPortrait = window.innerHeight > window.innerWidth;
-    addDebugLog('takePicture', {
-        videoReadyState: videoElement.readyState,
-        videoSize: { w: videoW, h: videoH },
-        videoDisplay: { w: videoElement.clientWidth, h: videoElement.clientHeight },
-        videoSettings: { w: settingsW, h: settingsH },
-        isPortrait,
-        frameContent: { w: bgDisplayW, h: bgDisplayH },
-        overlaySize: { w: processedImageCanvas.width, h: processedImageCanvas.height },
-        overlayCss: { w: overlayCssWidth, h: overlayCssHeight },
-        overlayTransform,
-    });
+        const frameContent = document.getElementById('frame-content');
+        const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
+        const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
 
-    const frameCanvas = renderFrame({
-        background: videoElement.readyState >= 2 ? videoElement : null,
-        backgroundDisplayWidth: bgDisplayW,
-        backgroundDisplayHeight: bgDisplayH,
-        overlay: processedImageCanvas,
-        overlayTransform: overlayTransform,
-        overlayCssWidth: overlayCssWidth,
-        overlayCssHeight: overlayCssHeight,
-        title: inputTitle.value,
-        comment: inputComment.value,
-        photographer: inputPhotographer.value,
-        date: inputDate.value,
-        location: inputLocation.value,
-        brightness: parseInt(brightnessSlider.value, 10),
-        contrast: parseInt(contrastSlider.value, 10),
-        saturation: 100,
-    });
+        // CSS 表示サイズを取得（プレビューと合成の一致用）
+        // video要素のclientWidth/clientHeightを優先（object-fit: coverと同じ計算基準にする）
+        const bgDisplayW = videoElement.clientWidth || (frameContent ? frameContent.offsetWidth : 0);
+        const bgDisplayH = videoElement.clientHeight || (frameContent ? frameContent.offsetHeight : 0);
 
-    // result-canvas に表示
-    resultCanvas.width = frameCanvas.width;
-    resultCanvas.height = frameCanvas.height;
-    resultCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
+        // カメラ映像サイズをデバッグログ（縦撮り問題の調査用）
+        const videoW = videoElement.videoWidth || 0;
+        const videoH = videoElement.videoHeight || 0;
+        let settingsW = null;
+        let settingsH = null;
+        try {
+            const tracks = videoElement.srcObject?.getVideoTracks?.();
+            if (tracks && tracks.length > 0) {
+                const s = tracks[0].getSettings();
+                settingsW = s.width;
+                settingsH = s.height;
+            }
+        } catch (e) {}
 
-    // フレームテキストレイヤーを同期（合成画面用）
-    syncFrameTextLayer();
+        const isPortrait = window.innerHeight > window.innerWidth;
+        addDebugLog('takePicture', {
+            videoReadyState: videoElement.readyState,
+            videoSize: { w: videoW, h: videoH },
+            videoDisplay: { w: videoElement.clientWidth, h: videoElement.clientHeight },
+            videoSettings: { w: settingsW, h: settingsH },
+            isPortrait,
+            frameContent: { w: bgDisplayW, h: bgDisplayH },
+            overlaySize: { w: processedImageCanvas.width, h: processedImageCanvas.height },
+            overlayCss: { w: overlayCssWidth, h: overlayCssHeight },
+            overlayTransform,
+        });
 
-    addDebugLog('takePicture-before-switch', { isCameraActive, srcObject: !!videoElement.srcObject, currentScreen });
-    switchScreen('preview');
-    addDebugLog('takePicture-after-switch', { currentScreen, isCameraActive, srcObject: !!videoElement.srcObject });
+        let frameCanvas;
+        try {
+            frameCanvas = renderFrame({
+                background: videoElement.readyState >= 2 ? videoElement : null,
+                backgroundDisplayWidth: bgDisplayW,
+                backgroundDisplayHeight: bgDisplayH,
+                overlay: processedImageCanvas,
+                overlayTransform: overlayTransform,
+                overlayCssWidth: overlayCssWidth,
+                overlayCssHeight: overlayCssHeight,
+                title: inputTitle.value,
+                comment: inputComment.value,
+                photographer: inputPhotographer.value,
+                date: inputDate.value,
+                location: inputLocation.value,
+                brightness: parseInt(brightnessSlider.value, 10),
+                contrast: parseInt(contrastSlider.value, 10),
+                saturation: 100,
+            });
+        } catch (renderErr) {
+            addDebugLog('renderFrame-error', { message: renderErr.message, stack: renderErr.stack });
+            throw renderErr;
+        }
+
+        // result-canvas に表示
+        resultCanvas.width = frameCanvas.width;
+        resultCanvas.height = frameCanvas.height;
+        resultCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
+
+        // フレームテキストレイヤーを同期（合成画面用）
+        syncFrameTextLayer();
+
+        addDebugLog('takePicture-before-switch', { isCameraActive, srcObject: !!videoElement.srcObject, currentScreen });
+        switchScreen('preview');
+        addDebugLog('takePicture-after-switch', { currentScreen, isCameraActive, srcObject: !!videoElement.srcObject });
+    } catch (err) {
+        addDebugLog('takePicture-error', { message: err.message, stack: err.stack });
+        showToast('撮影中にエラーが発生しました');
+        console.error('[PrintPhoto] takePicture error:', err);
+    }
 }
 
 // =====================================
