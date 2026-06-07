@@ -300,9 +300,15 @@ function switchScreen(name) {
     currentScreen = name;
     window.scrollTo(0, 0);
 
-    // プレビュー画面に遷移した時にデバッグログを再描画
-    if (name === 'preview') {
-        renderDebugLog();
+    // プレビュー画面に遷移した時にデバッグログを再描画・表示
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+        if (name === 'preview') {
+            debugPanel.classList.add('active');
+            renderDebugLog();
+        } else {
+            debugPanel.classList.remove('active');
+        }
     }
 }
 
