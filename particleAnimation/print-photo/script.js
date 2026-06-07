@@ -108,11 +108,12 @@ let isCameraActive = false;
 
 /**
  * カメラストリームを確実に停止し、videoElement も解放する
- * Android Chrome 対策：video 要素を DOM から削除して新規作成する核のリセット
+ * @param {boolean} [resetElement=false] - true の時のみ video 要素を DOM から再作成（撮影後専用）
  */
-function stopCameraInternal() {
+function stopCameraInternal(resetElement = false) {
     addDebugLog('stopCameraInternal', {
         before: {
+            resetElement,
             srcObject: !!videoElement.srcObject,
             isCameraActive,
             readyState: videoElement.readyState,
@@ -141,28 +142,29 @@ function stopCameraInternal() {
         stopCamera(); // camera.js 側の activeStream も停止
         isCameraActive = false;
 
-        // 2. 核のリセット：video 要素を DOM から削除して新規作成（Android Chrome の頑固なカメラ保持対策）
-        const parent = videoElement.parentNode;
-        const nextSibling = videoElement.nextSibling;
-        if (parent) {
-            const oldId = videoElement.id;
-            const oldClass = videoElement.className;
-            parent.removeChild(videoElement);
-            const newVideo = document.createElement('video');
-            newVideo.id = oldId;
-            newVideo.className = oldClass;
-            newVideo.autoplay = true;
-            newVideo.playsInline = true;
-            newVideo.muted = true;
-            newVideo.setAttribute('webkit-playsinline', '');
-            if (nextSibling) {
-                parent.insertBefore(newVideo, nextSibling);
-            } else {
-                parent.appendChild(newVideo);
+        // 2. 核のリセット：video 要素を DOM から削除して新規作成（撮影後専用）
+        if (resetElement) {
+            const parent = videoElement.parentNode;
+            if (parent && parent.contains(videoElement)) {
+                const nextSibling = videoElement.nextSibling;
+                const oldId = videoElement.id;
+                const oldClass = videoElement.className;
+                parent.removeChild(videoElement);
+                const newVideo = document.createElement('video');
+                newVideo.id = oldId;
+                newVideo.className = oldClass;
+                newVideo.autoplay = true;
+                newVideo.playsInline = true;
+                newVideo.muted = true;
+                newVideo.setAttribute('webkit-playsinline', '');
+                if (nextSibling) {
+                    parent.insertBefore(newVideo, nextSibling);
+                } else {
+                    parent.appendChild(newVideo);
+                }
+                videoElement = newVideo;
+                addDebugLog('stopCameraInternal-video-reset', { newVideoId: videoElement.id, parentId: parent.id });
             }
-            // script.js 内の videoElement 参照を更新
-            videoElement = newVideo;
-            addDebugLog('stopCameraInternal-video-reset', { newVideoId: videoElement.id, parentId: parent.id });
         }
     } catch (e) {
         addDebugLog('stopCameraInternal-error', { message: e.message, stack: e.stack });
@@ -170,6 +172,7 @@ function stopCameraInternal() {
 
     addDebugLog('stopCameraInternal', {
         after: {
+            resetElement,
             srcObject: !!videoElement.srcObject,
             isCameraActive,
             readyState: videoElement.readyState,
@@ -219,21 +222,36 @@ function copyDebugLogs() {
 // 初期化
 // =====================================
 function init() {
-    setTimeout(() => {
-        loader.style.opacity = '0';
+    addDebugLog('init-start', { ua: navigator.userAgent.slice(0, 80) });
+    try {
         setTimeout(() => {
-            loader.style.display = 'none';
-            content.style.display = 'flex';
-            content.classList.add('fade-in-up');
-        }, 500);
-    }, 800);
+            try {
+                loader.style.opacity = '0';
+                setTimeout(() => {
+                    try {
+                        loader.style.display = 'none';
+                        content.style.display = 'flex';
+                        content.classList.add('fade-in-up');
+                    } catch (e) {
+                        addDebugLog('init-loader-error', { message: e.message });
+                    }
+                }, 500);
+            } catch (e) {
+                addDebugLog('init-opacity-error', { message: e.message });
+            }
+        }, 800);
 
-    inputDate.value = getTodayStr();
-    restoreFormState();
-    restoreThumbnails();
-    checkEnvironment();
-    bindEvents();
-    loadGitCommit();
+        inputDate.value = getTodayStr();
+        restoreFormState();
+        restoreThumbnails();
+        checkEnvironment();
+        bindEvents();
+        loadGitCommit();
+        addDebugLog('init-complete', {});
+    } catch (e) {
+        addDebugLog('init-error', { message: e.message, stack: e.stack });
+        console.error('[PrintPhoto] init error:', e);
+    }
 }
 
 // =====================================
@@ -387,9 +405,9 @@ function bindEvents() {
 // =====================================
 function switchScreen(name) {
     addDebugLog('switchScreen', { from: currentScreen, to: name });
-    // カメラ停止（compose 以外に遷移する時は必ず停止）
+    // カメラ停止（compose 以外に遷移する時は必ず停止、video要素も再作成）
     if (currentScreen === 'compose' && name !== 'compose') {
-        stopCameraInternal();
+        stopCameraInternal(true);
     }
 
     Object.values(screens).forEach(s => s.classList.remove('active'));
