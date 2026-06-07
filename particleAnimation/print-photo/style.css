@@ -454,6 +454,7 @@ html, body {
     pointer-events: auto;
     cursor: grab;
     touch-action: none;
+    transform-origin: 0 0;
 }
 
 .overlay-canvas:active {

@@ -61,30 +61,48 @@ export function renderFrame(opts) {
     // 4. 透過画像を変形して重ねる（明るさ・コントラスト調整を適用）
     if (opts.overlay && opts.overlayTransform) {
         ctx.save();
+
+        // 合成エリアにクリップしてはみ出しを防ぐ
+        ctx.beginPath();
+        ctx.rect(px, py, pw, ph);
+        ctx.clip();
+
         const tf = opts.overlayTransform;
         const ox = opts.overlay.width;
         const oy = opts.overlay.height;
-        const sx = pw / ox;
-        const sy = ph / oy;
-        ctx.translate(px + tf.x * sx, py + tf.y * sy);
-        ctx.scale(tf.scale, tf.scale);
+
+        // フルサイズ画像を合成エリアにフィットするベーススケール
+        const baseScale = Math.min(pw / ox, ph / oy);
+
+        // overlayCanvas の CSS 表示サイズ（プレビュー座標系 → 合成エリア座標系の変換に必要）
+        const cssW = opts.overlayCssWidth || pw;
+        const cssH = opts.overlayCssHeight || ph;
+
+        // プレビューでの CSS 移動量を合成エリア座標系に変換
+        const translateX = tf.x * pw / cssW;
+        const translateY = tf.y * ph / cssH;
+
+        ctx.translate(px + translateX, py + translateY);
+        ctx.scale(tf.scale * baseScale, tf.scale * baseScale);
+
         const b = opts.brightness ?? 100;
         const c = opts.contrast ?? 100;
         const s = opts.saturation ?? 100;
         if (b !== 100 || c !== 100 || s !== 100) {
             ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
         }
+
         ctx.drawImage(opts.overlay, 0, 0);
         ctx.restore();
     }
 
     // 5. テキスト描画
-    drawFrameText(ctx, opts, scale);
+    drawFrameText(ctx, opts, scale, W, H);
 
     return canvas;
 }
 
-function drawFrameText(ctx, opts, scale) {
+function drawFrameText(ctx, opts, scale, W, H) {
     const fontFamily = "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif";
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'bottom';

@@ -444,9 +444,13 @@ function updateExposure() {
 function redrawOverlayCanvas() {
     if (!currentPreviewCanvas) return;
 
+    const frameContent = document.getElementById('frame-content');
+    const cssW = frameContent ? frameContent.offsetWidth : currentPreviewCanvas.width;
+    const cssH = frameContent ? frameContent.offsetHeight : currentPreviewCanvas.height;
+
     const ctx = overlayCanvas.getContext('2d');
-    overlayCanvas.width = currentPreviewCanvas.width;
-    overlayCanvas.height = currentPreviewCanvas.height;
+    overlayCanvas.width = cssW;
+    overlayCanvas.height = cssH;
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
     const brightness = parseInt(brightnessSlider.value, 10);
@@ -456,7 +460,10 @@ function redrawOverlayCanvas() {
         ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
     }
 
-    ctx.drawImage(currentPreviewCanvas, 0, 0);
+    // プレビュー画像を合成エリアにフィットするように左上に描画
+    const fitScale = Math.min(cssW / currentPreviewCanvas.width, cssH / currentPreviewCanvas.height);
+    ctx.drawImage(currentPreviewCanvas, 0, 0, currentPreviewCanvas.width * fitScale, currentPreviewCanvas.height * fitScale);
+
     ctx.filter = 'none';
 
     applyOverlayTransform();
@@ -528,6 +535,7 @@ function renderPreview() {
 // =====================================
 function applyOverlayTransform() {
     overlayCanvas.style.transform = `translate(${overlayTransform.x}px, ${overlayTransform.y}px) scale(${overlayTransform.scale})`;
+    overlayCanvas.style.transformOrigin = '0 0';
 }
 
 // =====================================
@@ -641,10 +649,16 @@ async function takePicture() {
         }
     }
 
+    const frameContent = document.getElementById('frame-content');
+    const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
+    const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
+
     const frameCanvas = renderFrame({
         background: videoElement.readyState >= 2 ? videoElement : null,
         overlay: processedImageCanvas,
         overlayTransform: overlayTransform,
+        overlayCssWidth: overlayCssWidth,
+        overlayCssHeight: overlayCssHeight,
         title: inputTitle.value,
         comment: inputComment.value,
         photographer: inputPhotographer.value,
@@ -1079,18 +1093,15 @@ function renderThumbnails(thumbs) {
                 cameraStartBtn.disabled = false;
 
                 originalImageCanvas = await loadImageToCanvas(dataUrl);
-                const isTransparent = hasTransparency(originalImageCanvas);
-                if (isTransparent) {
-                    processedImageCanvas = originalImageCanvas;
-                    const ctx = overlayCanvas.getContext('2d');
-                    overlayCanvas.width = originalImageCanvas.width;
-                    overlayCanvas.height = originalImageCanvas.height;
-                    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-                    ctx.drawImage(originalImageCanvas, 0, 0);
-                    applyOverlayTransform();
-                } else {
-                    await renderPreview();
-                }
+            const isTransparent = hasTransparency(originalImageCanvas);
+            if (isTransparent) {
+                processedImageCanvas = originalImageCanvas;
+                currentPreviewCanvas = originalImageCanvas;
+                redrawOverlayCanvas();
+                applyOverlayTransform();
+            } else {
+                await renderPreview();
+            }
             } catch (err) {
                 console.error('Load from history failed:', err);
                 showToast('履歴からの読み込みに失敗しました');

@@ -59,6 +59,8 @@ export function stopCamera() {
 
 /**
  * カメラ映像の露光を調整（CSS filter）
+ * @deprecated 現在はオーバーレイ画像（入力画像）にのみ明るさ・コントラストを適用し、
+ * カメラ映像には適用しない設計となっているため、この関数は未使用です。
  * @param {HTMLVideoElement} videoElement
  * @param {number} brightness - 50〜150
  * @param {number} contrast - 50〜150
@@ -70,6 +72,7 @@ export function setExposure(videoElement, brightness = 100, contrast = 100, satu
 
 /**
  * 露光調整用のCSS filter文字列を取得（Canvas合成用）
+ * @deprecated 同上。現在の設計では入力画像のみに適用するため未使用。
  * @param {number} brightness
  * @param {number} contrast
  * @param {number} saturation

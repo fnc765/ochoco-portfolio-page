@@ -95,6 +95,9 @@ class MockCanvasRenderingContext2D {
     restore() {}
     translate(x, y) {}
     scale(x, y) {}
+    beginPath() {}
+    rect(x, y, w, h) {}
+    clip() {}
     clearRect(x, y, w, h) {
         for (let py = Math.max(0, y); py < Math.min(this.height, y + h); py++) {
             for (let px = Math.max(0, x); px < Math.min(this.width, x + w); px++) {
