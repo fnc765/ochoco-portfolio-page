@@ -798,6 +798,35 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ===================================
+   デバッグログ（仮）
+   =================================== */
+.debug-panel {
+    max-width: 700px;
+    margin: 0.5rem auto 1rem;
+    padding: 0.5rem 1rem;
+    display: none;
+}
+
+.debug-panel.active {
+    display: block;
+}
+
+.debug-log {
+    width: 100%;
+    height: 120px;
+    font-size: 0.65rem;
+    font-family: 'Courier New', monospace;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 0.3rem;
+    padding: 0.5rem;
+    resize: none;
+    margin-bottom: 0.5rem;
+    outline: none;
+}
+
+/* ===================================
    フッター
    =================================== */
 .page-footer {

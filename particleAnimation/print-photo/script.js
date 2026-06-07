@@ -105,6 +105,32 @@ let pinchStartScale = 1;
 let cameraPermissionState = 'prompt'; // 'granted' | 'denied' | 'prompt' | 'unknown'
 let isCameraActive = false;
 
+// デバッグログ蓄積
+const debugLogs = [];
+
+function addDebugLog(label, data) {
+    const entry = `[${label}] ${JSON.stringify(data, null, 2)}`;
+    debugLogs.push(entry);
+    console.log(entry);
+    const el = document.getElementById('debug-log');
+    if (el) {
+        el.value = debugLogs.join('\n');
+    }
+}
+
+function copyDebugLogs() {
+    if (debugLogs.length === 0) {
+        showToast('ログがありません');
+        return;
+    }
+    const text = debugLogs.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('デバッグログをコピーしました');
+    }).catch(() => {
+        showToast('コピーに失敗しました');
+    });
+}
+
 // =====================================
 // 初期化
 // =====================================
@@ -247,6 +273,12 @@ function bindEvents() {
 
     // 位置情報
     document.getElementById('btn-get-location').addEventListener('click', handleGetLocation);
+
+    // デバッグログコピー
+    const btnCopyDebug = document.getElementById('btn-copy-debug');
+    if (btnCopyDebug) {
+        btnCopyDebug.addEventListener('click', copyDebugLogs);
+    }
 }
 
 // =====================================
@@ -411,11 +443,23 @@ function onCameraSuccess(stream) {
     isCameraActive = true;
     updateExposure();
     hideCameraGuide();
+
+    // デバッグパネルを表示
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+        debugPanel.classList.add('active');
+    }
 }
 
 function onCameraError(err) {
     console.error('[PrintPhoto] Camera error:', err.name, err.message);
     isCameraActive = false;
+
+    // デバッグパネルを非表示
+    const debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+        debugPanel.classList.remove('active');
+    }
 
     // エラー時はトップ画面に戻してガイドを表示（compose画面ではガイドが見えない）
     switchScreen('top');
@@ -691,7 +735,7 @@ async function takePicture() {
     } catch (e) {}
 
     const isPortrait = window.innerHeight > window.innerWidth;
-    console.log('[PrintPhoto] takePicture:', {
+    addDebugLog('takePicture', {
         videoReadyState: videoElement.readyState,
         videoSize: { w: videoW, h: videoH },
         videoDisplay: { w: videoElement.clientWidth, h: videoElement.clientHeight },
@@ -1186,6 +1230,7 @@ document.addEventListener('DOMContentLoaded', init);
 window.PrintPhoto = {
     switchScreen,
     showToast,
+    copyDebugLogs,
     selectedImageDataUrl: () => selectedImageDataUrl,
     getProcessedCanvas: () => processedImageCanvas,
     getOriginalCanvas: () => originalImageCanvas,
