@@ -148,6 +148,10 @@ html, body {
     margin-right: 0.4rem;
 }
 
+#camera-permission-text {
+    white-space: pre-wrap;
+}
+
 .section-title-small {
     font-size: 1rem;
     font-weight: 700;

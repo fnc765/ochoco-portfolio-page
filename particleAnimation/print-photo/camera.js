@@ -4,6 +4,10 @@
 
 let activeStream = null;
 
+function isLoopbackHost(hostname) {
+    return hostname === 'localhost' || hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
 /**
  * カメラを起動する
  * @param {HTMLVideoElement} videoElement
@@ -12,9 +16,14 @@ let activeStream = null;
 export async function startCamera(videoElement) {
     // HTTPSチェックは行うが、エラーとしてスローせず警告のみにする
     // （getUserMedia が呼べない場合はブラウザが自動で拒否する）
-    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+    const isSecure = window.isSecureContext || window.location.protocol === 'https:' || isLoopbackHost(window.location.hostname);
     if (!isSecure) {
         console.warn('[PrintPhoto] getUserMedia requires HTTPS. Current:', window.location.protocol);
+    }
+
+    if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+        activeStream = null;
     }
 
     const constraints = {

@@ -5,7 +5,7 @@
 const DB_NAME = 'PrintPhotoDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'thumbnails';
-const MAX_ITEMS = 5; // 履歴5枚まで
+const MAX_ITEMS = 10; // 履歴10枚まで
 
 function openDB() {
     return new Promise((resolve, reject) => {

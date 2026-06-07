@@ -122,6 +122,50 @@ test('E-P16: デプロイ後のURLでデバッグログが表示される', asyn
     await expect(debugLog).toHaveValue(/takePicture/);
 });
 
+test('E-P17: カメラ未対応時はトップ画面のままガイドを表示', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+
+    const input = page.locator('[data-testid="image-input"]');
+    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
+
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, 'mediaDevices', {
+            configurable: true,
+            value: undefined,
+        });
+    });
+
+    await page.click('[data-testid="camera-start-btn"]');
+
+    await expect(page.locator('#screen-top')).toBeVisible();
+    await expect(page.locator('#camera-permission-guide')).toContainText('カメラ機能に対応していません');
+});
+
+test('E-P18: プレビューから戻るとカメラプレビューを再開する', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+
+    const input = page.locator('[data-testid="image-input"]');
+    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
+    await page.waitForTimeout(500);
+
+    await page.click('[data-testid="camera-start-btn"]');
+    await expect(page.locator('#screen-compose')).toBeVisible();
+
+    await page.waitForTimeout(500);
+    await page.click('[data-testid="shutter-btn"]');
+    await expect(page.locator('#screen-preview')).toBeVisible();
+
+    await page.click('#btn-back-compose');
+    await expect(page.locator('#screen-compose')).toBeVisible();
+
+    const hasStream = await page.evaluate(() => {
+        return !!document.getElementById('camera-video')?.srcObject;
+    });
+    expect(hasStream).toBe(true);
+});
+
 // =====================================
 // テキスト入力・プレビュー
 // =====================================

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     applyChromaKey,
+    mapContainPointToNormalized,
     pickColor,
     hexToRgb,
     rgbToHex,
@@ -63,6 +64,16 @@ describe('chroma-key', () => {
         const ctx = result.getContext('2d');
         const imgData = ctx.getImageData(0, 0, 1, 1);
         expect(imgData.data[3]).toBe(0);
+    });
+
+    it('U-C7: contain描画座標を元画像の正規化座標へ変換', () => {
+        const mapped = mapContainPointToNormalized(50, 25, 400, 200, 100, 100);
+        expect(mapped).toEqual({ x: 0.5, y: 0.5 });
+    });
+
+    it('U-C8: contain描画の余白部分は null を返す', () => {
+        const mapped = mapContainPointToNormalized(50, 80, 400, 200, 100, 100);
+        expect(mapped).toBeNull();
     });
 
     it('hexToRgb', () => {

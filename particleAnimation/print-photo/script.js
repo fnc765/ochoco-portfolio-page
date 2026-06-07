@@ -6,6 +6,7 @@ import {
     loadImageToCanvas,
     applyChromaKey,
     applyChromaKeyPreview,
+    mapContainPointToNormalized,
     pickColor,
     rgbToHex,
     hasTransparency,
@@ -105,12 +106,187 @@ let pinchStartScale = 1;
 // カメラ状態
 let cameraPermissionState = 'prompt'; // 'granted' | 'denied' | 'prompt' | 'unknown'
 let isCameraActive = false;
+let cameraRequestId = 0;
+
+const CAMERA_REQUEST_TIMEOUT_MS = 10000;
+const CAMERA_READY_TIMEOUT_MS = 4000;
+
+function isLoopbackHost(hostname) {
+    return hostname === 'localhost' || hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function isSecureDeviceContext() {
+    return window.isSecureContext || window.location.protocol === 'https:' || isLoopbackHost(window.location.hostname);
+}
+
+function createCameraError(name, message) {
+    const err = new Error(message);
+    err.name = name;
+    return err;
+}
+
+function invalidateCameraRequest() {
+    cameraRequestId += 1;
+}
+
+function stopStreamTracks(stream) {
+    if (!stream || !stream.getTracks) return;
+    stream.getTracks().forEach(track => {
+        try {
+            track.stop();
+        } catch (e) {
+            console.warn('[PrintPhoto] Failed to stop stale track:', e);
+        }
+    });
+}
+
+function getVideoTrackCount(video) {
+    return video?.srcObject?.getVideoTracks?.().length ?? 0;
+}
+
+function hasRenderableVideoFrame(video) {
+    return !!video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
+}
+
+function setShutterDisabled(disabled) {
+    if (btnShutter) {
+        btnShutter.disabled = disabled;
+    }
+}
+
+function getCameraPreflightMessage() {
+    const inAppBrowser = detectInAppBrowser();
+    if (inAppBrowser) {
+        return '【' + inAppBrowser + '】アプリ内ブラウザではカメラ機能が使用できません。Safari または Chrome の「本体」でこのページを開いてください。（アプリ内の「⋯」メニューから「ブラウザで開く」を選んでください）';
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return 'お使いのブラウザはカメラ機能に対応していません。Safari / Chrome / Edge をお試しください。';
+    }
+
+    if (!isSecureDeviceContext()) {
+        return 'カメラを使うにはHTTPS接続が必要です。現在: ' + window.location.protocol + '//' + window.location.host;
+    }
+
+    if (!isCameraAllowedByPolicy()) {
+        return 'このサイトのHTTPヘッダー（Permissions-Policy）でカメラがブロックされている可能性があります。サーバー設定を確認してください。';
+    }
+
+    return null;
+}
+
+function showCameraStartGuide(message) {
+    if (currentScreen !== 'top') {
+        switchScreen('top');
+    }
+    showCameraGuide(message);
+}
+
+async function waitForVideoReady(videoElement, timeoutMs = CAMERA_READY_TIMEOUT_MS) {
+    if (!videoElement?.srcObject) {
+        return false;
+    }
+
+    if (hasRenderableVideoFrame(videoElement) || getVideoTrackCount(videoElement) === 0) {
+        return true;
+    }
+
+    return new Promise((resolve) => {
+        let settled = false;
+        let timeoutId = null;
+
+        const finish = (ready) => {
+            if (settled) return;
+            settled = true;
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            ['loadedmetadata', 'loadeddata', 'canplay', 'playing'].forEach(eventName => {
+                videoElement.removeEventListener(eventName, onReady);
+            });
+            resolve(ready);
+        };
+
+        const onReady = () => {
+            if (hasRenderableVideoFrame(videoElement) || getVideoTrackCount(videoElement) === 0) {
+                finish(true);
+            }
+        };
+
+        ['loadedmetadata', 'loadeddata', 'canplay', 'playing'].forEach(eventName => {
+            videoElement.addEventListener(eventName, onReady);
+        });
+
+        timeoutId = setTimeout(() => {
+            finish(hasRenderableVideoFrame(videoElement) || getVideoTrackCount(videoElement) === 0);
+        }, timeoutMs);
+    });
+}
+
+async function startCameraSession() {
+    hideCameraGuide();
+    setShutterDisabled(true);
+
+    const requestId = ++cameraRequestId;
+    addDebugLog('camera-start-request', { requestId, currentScreen });
+
+    const streamPromise = startCamera(videoElement);
+    streamPromise.then((stream) => {
+        if (requestId !== cameraRequestId || currentScreen !== 'compose') {
+            stopStreamTracks(stream);
+        }
+    }).catch(() => {});
+
+    let timeoutId = null;
+    try {
+        const stream = await Promise.race([
+            streamPromise,
+            new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(createCameraError('TimeoutError', 'ブラウザがカメラ要求を無視しました（Permissions-Policy、アプリ内ブラウザ、またはグローバル設定の可能性）'));
+                }, CAMERA_REQUEST_TIMEOUT_MS);
+            }),
+        ]);
+
+        clearTimeout(timeoutId);
+
+        if (requestId !== cameraRequestId || currentScreen !== 'compose') {
+            stopStreamTracks(stream);
+            throw createCameraError('AbortError', 'camera request superseded');
+        }
+
+        onCameraSuccess(stream);
+
+        const ready = await waitForVideoReady(videoElement);
+        if (requestId !== cameraRequestId || currentScreen !== 'compose') {
+            return false;
+        }
+
+        if (!ready) {
+            stopCameraInternal();
+            throw createCameraError('NotReadableError', 'カメラ映像の準備が完了しませんでした。');
+        }
+
+        setShutterDisabled(false);
+        addDebugLog('camera-start-ready', {
+            requestId,
+            readyState: videoElement.readyState,
+            videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
+            trackCount: getVideoTrackCount(videoElement),
+        });
+        return true;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
 
 /**
  * カメラストリームを確実に停止し、videoElement も解放する
  * @param {boolean} [resetElement=false] - true の時のみ video 要素を DOM から再作成（撮影後専用）
  */
 function stopCameraInternal(resetElement = false) {
+    invalidateCameraRequest();
+    setShutterDisabled(true);
     addDebugLog('stopCameraInternal', {
         before: {
             resetElement,
@@ -205,17 +381,24 @@ function renderDebugLog() {
     }
 }
 
-function copyDebugLogs() {
+async function copyDebugLogs() {
     if (debugLogs.length === 0) {
         showToast('ログがありません');
         return;
     }
+
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        showToast('このブラウザではコピーできません');
+        return;
+    }
+
     const text = debugLogs.join('\n');
-    navigator.clipboard.writeText(text).then(() => {
+    try {
+        await navigator.clipboard.writeText(text);
         showToast('デバッグログをコピーしました');
-    }).catch(() => {
+    } catch (e) {
         showToast('コピーに失敗しました');
-    });
+    }
 }
 
 // =====================================
@@ -276,13 +459,15 @@ async function loadGitCommit() {
 // 環境チェック（HTTPS / カメラ権限）
 // =====================================
 function checkEnvironment() {
-    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+    const isSecure = isSecureDeviceContext();
     if (!isSecure) {
         httpsWarning.style.display = 'block';
         httpsWarning.querySelector('p').innerHTML =
             '<i class="fas fa-lock" aria-hidden="true"></i> ' +
             'カメラを使うには<strong>HTTPS</strong>接続が必要です。<br>' +
             '現在: ' + window.location.protocol + '//' + window.location.host;
+    } else {
+        httpsWarning.style.display = 'none';
     }
 
     // Permissions API でカメラ権限状態を確認（可能な場合）
@@ -321,11 +506,15 @@ function bindEvents() {
 
     // カメラ起動ボタン - getUserMedia はユーザージェスチャーから同期的に呼ぶ必要がある
     cameraStartBtn.addEventListener('click', () => {
-        handleCameraStart();
+        void handleCameraStart();
     });
     btnBackTop.addEventListener('click', () => switchScreen('top'));
-    btnBackCompose.addEventListener('click', () => switchScreen('compose'));
-    btnShutter.addEventListener('click', takePicture);
+    btnBackCompose.addEventListener('click', () => {
+        void handleBackToCompose();
+    });
+    btnShutter.addEventListener('click', () => {
+        void takePicture();
+    });
 
     [inputTitle, inputComment, inputPhotographer, inputDate, inputLocation].forEach(el => {
         el.addEventListener('input', () => {
@@ -380,7 +569,9 @@ function bindEvents() {
     // デバッグログコピー
     const btnCopyDebug = document.getElementById('btn-copy-debug');
     if (btnCopyDebug) {
-        btnCopyDebug.addEventListener('click', copyDebugLogs);
+        btnCopyDebug.addEventListener('click', () => {
+            void copyDebugLogs();
+        });
     }
 
     // ページ非表示（別タブ・別アプリ・画面OFF）時にカメラを停止
@@ -430,95 +621,49 @@ function switchScreen(name) {
 // =====================================
 // カメラ起動ハンドラー（ユーザージェスチャーから同期的に呼ぶ）
 // =====================================
-function handleCameraStart() {
+async function handleBackToCompose() {
+    switchScreen('compose');
+
+    if (!selectedImageDataUrl) {
+        return;
+    }
+
+    const preflightMessage = getCameraPreflightMessage();
+    if (preflightMessage) {
+        showCameraStartGuide(preflightMessage);
+        return;
+    }
+
+    try {
+        await startCameraSession();
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            onCameraError(err);
+        }
+    }
+}
+
+async function handleCameraStart() {
     console.log('[PrintPhoto] handleCameraStart called');
     if (!selectedImageDataUrl) {
         showToast('先に画像を選択してください');
         return;
     }
 
-    // アプリ内ブラウザ（LINE/Instagram/Twitter等）では getUserMedia が無効なことが多い
-    const inAppBrowser = detectInAppBrowser();
-    if (inAppBrowser) {
-        showCameraGuide('【' + inAppBrowser + '】アプリ内ブラウザではカメラ機能が使用できません。Safari または Chrome の「本体」でこのページを開いてください。（アプリ内の「⋯」メニューから「ブラウザで開く」を選んでください）');
+    const preflightMessage = getCameraPreflightMessage();
+    if (preflightMessage) {
+        showCameraStartGuide(preflightMessage);
         return;
     }
 
     switchScreen('compose');
-    hideCameraGuide();
-
-    // navigator.mediaDevices の存在確認
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('[PrintPhoto] getUserMedia not supported');
-        showCameraGuide('お使いのブラウザはカメラ機能に対応していません。Safari / Chrome / Edge をお試しください。');
-        return;
-    }
-
-    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || /^127\./.test(window.location.hostname) || /^192\.168\./.test(window.location.hostname) || /^10\./.test(window.location.hostname);
-    console.log('[PrintPhoto] isSecure:', isSecure, 'protocol:', window.location.protocol, 'hostname:', window.location.hostname);
-    if (!isSecure) {
-        showCameraGuide('カメラを使うにはHTTPS接続が必要です。現在: ' + window.location.protocol + '//' + window.location.host);
-        return;
-    }
-
-    // Permissions-Policy / Feature-Policy でカメラがブロックされていないか確認
-    if (!isCameraAllowedByPolicy()) {
-        showCameraGuide('このサイトのHTTPヘッダー（Permissions-Policy）でカメラがブロックされている可能性があります。サーバー設定を確認してください。');
-        return;
-    }
-
-    // getUserMedia を同期的に呼ぶ（Promise.then で非同期処理を分離）
-    const constraints = {
-        video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-        },
-        audio: false,
-    };
-
-    console.log('[PrintPhoto] Requesting getUserMedia...');
-    let resolved = false;
-
-    // getUserMedia が無視された場合（Promiseがpendingのまま）を検出するためのタイムアウト
-    const timeoutId = setTimeout(() => {
-        if (!resolved) {
-            console.error('[PrintPhoto] getUserMedia timed out after 10s — browser may be ignoring the request');
-            onCameraError({ name: 'TimeoutError', message: 'ブラウザがカメラ要求を無視しました（Permissions-Policy、アプリ内ブラウザ、またはグローバル設定の可能性）' });
-        }
-    }, 10000);
-
-    navigator.mediaDevices.getUserMedia(constraints)
-        .then((stream) => {
-            resolved = true;
-            clearTimeout(timeoutId);
-            console.log('[PrintPhoto] getUserMedia success');
-            onCameraSuccess(stream);
-        })
-        .catch((err) => {
-            resolved = true;
-            clearTimeout(timeoutId);
-            console.log('[PrintPhoto] getUserMedia first attempt failed:', err.name, err.message);
-            // facingMode を外して再試行
-            if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
-                return navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-                    audio: false,
-                });
-            }
-            throw err;
-        })
-        .then((stream) => {
-            if (stream) onCameraSuccess(stream);
-        })
-        .catch((err) => {
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeoutId);
-            }
-            console.error('[PrintPhoto] getUserMedia final error:', err.name, err.message);
+    try {
+        await startCameraSession();
+    } catch (err) {
+        if (err.name !== 'AbortError') {
             onCameraError(err);
-        });
+        }
+    }
 }
 
 // =====================================
@@ -566,14 +711,14 @@ function isCameraAllowedByPolicy() {
 }
 
 function onCameraSuccess(stream) {
-    videoElement.srcObject = stream;
-    videoElement.onloadedmetadata = () => {
-        videoElement.play().catch(() => {});
-    };
     setActiveStream(stream); // camera.js 側と同期
     isCameraActive = true;
     updateExposure();
     hideCameraGuide();
+    addDebugLog('camera-success', {
+        readyState: videoElement.readyState,
+        trackCount: stream?.getVideoTracks?.().length ?? 0,
+    });
 }
 
 function onCameraError(err) {
@@ -781,7 +926,9 @@ function handleTouchEnd(e) {
 // =====================================
 function handleColorPick(e) {
     if (!originalImageCanvas) return;
-    const rect = uploadPreview.getBoundingClientRect();
+    const previewImage = uploadPreview.querySelector('img');
+    const rect = previewImage ? previewImage.getBoundingClientRect() : uploadPreview.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     const color = pickColor(originalImageCanvas, x, y, true);
@@ -791,14 +938,22 @@ function handleColorPick(e) {
 }
 
 function handleOverlayColorPick(e) {
-    if (!originalImageCanvas) return;
+    if (!originalImageCanvas || !currentPreviewCanvas) return;
     const rect = overlayCanvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    // 元画像座標に換算
-    const ox = x * (overlayCanvas.width / originalImageCanvas.width);
-    const oy = y * (overlayCanvas.height / originalImageCanvas.height);
-    const color = pickColor(originalImageCanvas, ox, oy, true);
+    const mapped = mapContainPointToNormalized(
+        x * overlayCanvas.width,
+        y * overlayCanvas.height,
+        currentPreviewCanvas.width,
+        currentPreviewCanvas.height,
+        overlayCanvas.width,
+        overlayCanvas.height
+    );
+    if (!mapped) return;
+
+    const color = pickColor(originalImageCanvas, mapped.x, mapped.y, true);
     if (color && color.a > 0) {
         setTargetColor(color.r, color.g, color.b);
     }
@@ -816,27 +971,12 @@ function setTargetColor(r, g, b) {
 // =====================================
 async function tryStartCamera() {
     try {
-        const constraints = {
-            video: {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-            },
-            audio: false,
-        };
-        let stream = await navigator.mediaDevices.getUserMedia(constraints);
-        onCameraSuccess(stream);
+        return await startCameraSession();
     } catch (err) {
-        if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
-            const fallbackConstraints = {
-                video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-                audio: false,
-            };
-            let stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-            onCameraSuccess(stream);
-        } else {
-            console.error('[PrintPhoto] tryStartCamera failed:', err);
+        if (err.name !== 'AbortError') {
+            onCameraError(err);
         }
+        return false;
     }
 }
 
@@ -850,14 +990,28 @@ async function takePicture() {
     }
 
     try {
-        // カメラが未起動の場合、再度起動を試みる
-        if (!isCameraActive && videoElement.readyState < 2) {
-            const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
-            if (isSecure) {
-                showToast('カメラを起動しています...');
-                await tryStartCamera();
-                // カメラがまだ起動できなかった場合でも、黒背景で続行
+        if (!videoElement.srcObject) {
+            if (!isSecureDeviceContext() || !navigator.mediaDevices?.getUserMedia) {
+                showToast('カメラを利用できません');
+                return;
             }
+
+            showToast('カメラを起動しています...');
+            const restarted = await tryStartCamera();
+            if (!restarted) {
+                return;
+            }
+        }
+
+        const videoReady = await waitForVideoReady(videoElement);
+        if (!videoReady) {
+            addDebugLog('takePicture-camera-not-ready', {
+                readyState: videoElement.readyState,
+                videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
+                trackCount: getVideoTrackCount(videoElement),
+            });
+            showToast('カメラの準備が完了してから再度お試しください');
+            return;
         }
 
         const frameContent = document.getElementById('frame-content');
@@ -900,7 +1054,7 @@ async function takePicture() {
         let frameCanvas;
         try {
             frameCanvas = renderFrame({
-                background: videoElement.readyState >= 2 ? videoElement : null,
+                background: hasRenderableVideoFrame(videoElement) ? videoElement : null,
                 backgroundDisplayWidth: bgDisplayW,
                 backgroundDisplayHeight: bgDisplayH,
                 overlay: processedImageCanvas,
@@ -1249,7 +1403,7 @@ function getShareText() {
 // 位置情報取得
 // =====================================
 async function handleGetLocation() {
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+    if (!isSecureDeviceContext()) {
         showToast('位置情報を使うにはHTTPS接続が必要です');
         return;
     }

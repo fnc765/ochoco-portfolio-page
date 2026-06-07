@@ -138,6 +138,36 @@ export function pickColor(canvas, x, y, normalized = true) {
 }
 
 /**
+ * contain で描画されたプレビュー上の座標を、元画像の正規化座標へ変換する
+ * 描画領域外を指している場合は null を返す
+ * @param {number} pointX
+ * @param {number} pointY
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @param {number} targetWidth
+ * @param {number} targetHeight
+ * @returns {{x:number,y:number} | null}
+ */
+export function mapContainPointToNormalized(pointX, pointY, sourceWidth, sourceHeight, targetWidth, targetHeight) {
+    if (!sourceWidth || !sourceHeight || !targetWidth || !targetHeight) {
+        return null;
+    }
+
+    const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+    const drawWidth = sourceWidth * scale;
+    const drawHeight = sourceHeight * scale;
+
+    if (pointX < 0 || pointY < 0 || pointX > drawWidth || pointY > drawHeight) {
+        return null;
+    }
+
+    return {
+        x: pointX / drawWidth,
+        y: pointY / drawHeight,
+    };
+}
+
+/**
  * プレビュー用に縮小したクロマキー処理（高速）
  * @param {HTMLCanvasElement} sourceCanvas
  * @param {{r:number,g:number,b:number}} targetColor
