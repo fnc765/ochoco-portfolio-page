@@ -112,6 +112,10 @@ function addDebugLog(label, data) {
     const entry = `[${label}] ${JSON.stringify(data, null, 2)}`;
     debugLogs.push(entry);
     console.log(entry);
+    renderDebugLog();
+}
+
+function renderDebugLog() {
     const el = document.getElementById('debug-log');
     if (el) {
         el.value = debugLogs.join('\n');
@@ -295,6 +299,11 @@ function switchScreen(name) {
     screens[name].classList.add('active');
     currentScreen = name;
     window.scrollTo(0, 0);
+
+    // プレビュー画面に遷移した時にデバッグログを再描画
+    if (name === 'preview') {
+        renderDebugLog();
+    }
 }
 
 // =====================================
@@ -761,12 +770,6 @@ async function takePicture() {
     // フレームテキストレイヤーを同期（合成画面用）
     syncFrameTextLayer();
 
-    // デバッグパネルを表示（プレビュー画面に移動したので）
-    const debugPanel = document.getElementById('debug-panel');
-    if (debugPanel) {
-        debugPanel.classList.add('active');
-    }
-
     switchScreen('preview');
 }
 
@@ -1225,6 +1228,9 @@ window.PrintPhoto = {
     switchScreen,
     showToast,
     copyDebugLogs,
+    debugLogs,
+    addDebugLog,
+    renderDebugLog,
     selectedImageDataUrl: () => selectedImageDataUrl,
     getProcessedCanvas: () => processedImageCanvas,
     getOriginalCanvas: () => originalImageCanvas,

@@ -171,6 +171,8 @@ function parseColor(str) {
     return [0, 0, 0, 255];
 }
 
+const _mockElements = new Map();
+
 global.document = {
     createElement: (tag) => {
         if (tag === 'canvas') {
@@ -178,6 +180,22 @@ global.document = {
         }
         return {};
     },
+    getElementById: (id) => {
+        if (_mockElements.has(id)) return _mockElements.get(id);
+        return null;
+    },
+    querySelector: (sel) => {
+        if (sel.startsWith('#')) {
+            const id = sel.slice(1);
+            if (_mockElements.has(id)) return _mockElements.get(id);
+        }
+        return null;
+    },
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    // テスト用：モック要素を登録
+    _registerMockElement: (id, el) => _mockElements.set(id, el),
+    _clearMockElements: () => _mockElements.clear(),
 };
 
 global.HTMLCanvasElement = MockCanvasElement;
