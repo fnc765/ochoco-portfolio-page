@@ -121,28 +121,26 @@ function stopCameraInternal() {
         },
     });
 
-    if (videoElement.srcObject) {
-        videoElement.pause();
-        // enabled=false を先に設定してから stop する（Chrome mobile の確実な解放）
-        videoElement.srcObject.getTracks().forEach(track => {
-            track.enabled = false;
-            try {
-                track.stop();
-            } catch (e) {
-                addDebugLog('track-stop-error', { label: track.label, error: e.message });
-            }
-        });
-        // srcObject を明示的に空の MediaStream → null へと段階的に解除（Chrome 対策）
-        try {
-            videoElement.srcObject = new MediaStream();
-        } catch (e) {
-            // 無視
+    try {
+        if (videoElement.srcObject) {
+            videoElement.pause();
+            videoElement.srcObject.getTracks().forEach(track => {
+                try {
+                    track.enabled = false;
+                    track.stop();
+                } catch (e) {
+                    addDebugLog('track-stop-error', { label: track.label, error: e.message });
+                }
+            });
+            videoElement.srcObject = null;
         }
-        videoElement.srcObject = null;
+        videoElement.removeAttribute('src');
         videoElement.load();
+        stopCamera(); // camera.js 側の activeStream も停止
+        isCameraActive = false;
+    } catch (e) {
+        addDebugLog('stopCameraInternal-error', { message: e.message, stack: e.stack });
     }
-    stopCamera(); // camera.js 側の activeStream も停止
-    isCameraActive = false;
 
     addDebugLog('stopCameraInternal', {
         after: {
@@ -156,12 +154,19 @@ function stopCameraInternal() {
 
 // デバッグログ蓄積
 const debugLogs = [];
+let gitCommitHash = 'unknown';
 
 function addDebugLog(label, data) {
-    const entry = `[${label}] ${JSON.stringify(data, null, 2)}`;
-    debugLogs.push(entry);
-    console.log(entry);
-    renderDebugLog();
+    const ts = new Date().toISOString();
+    const hash = gitCommitHash || 'unknown';
+    try {
+        const entry = `[${hash}] [${ts}] [${label}] ${JSON.stringify(data, null, 2)}`;
+        debugLogs.push(entry);
+        console.log(entry);
+        renderDebugLog();
+    } catch (e) {
+        console.error(`[${hash}] [${ts}] [addDebugLog-error]`, e, { label, data });
+    }
 }
 
 function renderDebugLog() {
@@ -213,6 +218,7 @@ async function loadGitCommit() {
         const response = await fetch('version.json');
         if (!response.ok) return;
         const data = await response.json();
+        gitCommitHash = data.commit || 'unknown';
         const el = document.getElementById('git-commit');
         if (el && data.commit) {
             el.textContent = `commit: ${data.commit}`;
@@ -834,7 +840,7 @@ async function takePicture() {
         } catch (e) {}
 
         const isPortrait = window.innerHeight > window.innerWidth;
-        addDebugLog('takePicture', {
+        addDebugLog('takePicture-params', {
             videoReadyState: videoElement.readyState,
             videoSize: { w: videoW, h: videoH },
             videoDisplay: { w: videoElement.clientWidth, h: videoElement.clientHeight },
@@ -846,6 +852,7 @@ async function takePicture() {
             overlayTransform,
         });
 
+        addDebugLog('takePicture-before-renderFrame', { readyState: videoElement.readyState, srcObject: !!videoElement.srcObject });
         let frameCanvas;
         try {
             frameCanvas = renderFrame({
@@ -869,14 +876,19 @@ async function takePicture() {
             addDebugLog('renderFrame-error', { message: renderErr.message, stack: renderErr.stack });
             throw renderErr;
         }
+        addDebugLog('takePicture-after-renderFrame', { frameCanvas: { w: frameCanvas?.width, h: frameCanvas?.height } });
 
         // result-canvas に表示
+        addDebugLog('takePicture-before-drawImage', { resultCanvas: { w: resultCanvas.width, h: resultCanvas.height } });
         resultCanvas.width = frameCanvas.width;
         resultCanvas.height = frameCanvas.height;
         resultCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
+        addDebugLog('takePicture-after-drawImage', { resultCanvas: { w: resultCanvas.width, h: resultCanvas.height } });
 
         // フレームテキストレイヤーを同期（合成画面用）
+        addDebugLog('takePicture-before-syncFrameTextLayer', {});
         syncFrameTextLayer();
+        addDebugLog('takePicture-after-syncFrameTextLayer', {});
 
         addDebugLog('takePicture-before-switch', { isCameraActive, srcObject: !!videoElement.srcObject, currentScreen });
         switchScreen('preview');
