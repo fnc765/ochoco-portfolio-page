@@ -1056,7 +1056,7 @@ function syncFrameTextLayer() {
     photographerEl.querySelector('.meta-text').textContent = inputPhotographer.value;
     photographerEl.style.display = inputPhotographer.value ? '' : 'none';
     const dateLocEl = document.getElementById('frame-date-location');
-    dateLocEl.querySelector('.meta-date-text').textContent = inputDate.value;
+    dateLocEl.querySelector('.meta-date-text').textContent = formatDateMMDDYYYY(inputDate.value);
     dateLocEl.querySelector('.meta-loc-text').textContent = inputLocation.value;
     dateLocEl.style.display = (inputDate.value || inputLocation.value) ? '' : 'none';
 }
