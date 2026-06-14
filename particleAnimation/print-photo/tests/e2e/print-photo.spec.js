@@ -153,7 +153,19 @@ test('E-P19: 戻るボタンでトップ画面に戻れる', async ({ page }) =>
     await expect(page.locator('#screen-top')).toBeVisible();
 });
 
-test('E-P20: メタ情報欄に Font Awesome のアイコンが表示される', async ({ page }) => {
+test('E-P20: 撮影後フォームのラベルに Font Awesome アイコンが表示される', async ({ page }) => {
+    await uploadAndOpenCompose(page);
+    await page.waitForTimeout(500);
+    await takePictureAndOpenPreview(page);
+
+    await expect(page.locator('label[for="input-title"] .form-icon')).toBeVisible();
+    await expect(page.locator('label[for="input-comment"] .form-icon')).toBeVisible();
+    await expect(page.locator('label[for="input-photographer"] .form-icon')).toBeVisible();
+    await expect(page.locator('label[for="input-date"] .form-icon')).toBeVisible();
+    await expect(page.locator('label[for="input-location"] .form-icon')).toBeVisible();
+});
+
+test('E-P21: プレビュー画面ではフレーム内メタアイコンは非表示、入力値は保持される', async ({ page }) => {
     await uploadAndOpenCompose(page);
     await page.waitForTimeout(500);
     await takePictureAndOpenPreview(page);
@@ -162,14 +174,15 @@ test('E-P20: メタ情報欄に Font Awesome のアイコンが表示される',
     await page.locator('#input-location').fill('Spagonia by Silent');
     await page.waitForTimeout(300);
 
-    await expect(page.locator('#frame-photographer .fa-user')).toHaveClass(/meta-icon/);
-    await expect(page.locator('#frame-date-location .fa-calendar')).toHaveClass(/meta-icon/);
-    await expect(page.locator('#frame-date-location .fa-location-dot')).toHaveClass(/meta-icon/);
+    const faUserVisible = await page.locator('#frame-photographer .fa-user').isVisible();
+    const faCalendarVisible = await page.locator('#frame-date-location .fa-calendar').isVisible();
+    const faLocVisible = await page.locator('#frame-date-location .fa-location-dot').isVisible();
+    expect(faUserVisible).toBe(false);
+    expect(faCalendarVisible).toBe(false);
+    expect(faLocVisible).toBe(false);
 
     const photographerText = await page.locator('#frame-photographer .meta-text').textContent();
     expect(photographerText).toBe('エーイ A. Eila');
-    const dateText = await page.locator('#frame-date-location .meta-date-text').textContent();
     const locText = await page.locator('#frame-date-location .meta-loc-text').textContent();
     expect(locText).toBe('Spagonia by Silent');
-    expect(dateText).not.toBe('');
 });

@@ -539,6 +539,17 @@ html, body {
     margin-right: 0.3em;
 }
 
+.form-label .form-icon {
+    color: #aaa;
+    font-size: 0.9em;
+    margin-right: 0.4em;
+}
+
+#screen-compose .frame-meta .meta-icon,
+#screen-preview .frame-meta .meta-icon {
+    display: none;
+}
+
 /* ===================================
    調整パネル
    =================================== */

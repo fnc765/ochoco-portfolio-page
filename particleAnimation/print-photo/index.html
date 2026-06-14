@@ -204,27 +204,24 @@
             <!-- 入力フォーム -->
             <div class="glass-card form-card">
                 <div class="form-group">
-                    <label class="form-label" for="input-title">タイトル</label>
+                    <label class="form-label" for="input-title"><i class="fa-solid fa-heading form-icon" aria-hidden="true"></i>タイトル</label>
                     <input type="text" id="input-title" class="form-input" placeholder="タイトルを入力" maxlength="40" data-testid="title-input">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="input-comment">コメント</label>
+                    <label class="form-label" for="input-comment"><i class="fa-solid fa-comment form-icon" aria-hidden="true"></i>コメント</label>
                     <textarea id="input-comment" class="form-textarea" placeholder="コメントを入力" rows="2" maxlength="200"></textarea>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="input-photographer">撮影者</label>
+                    <label class="form-label" for="input-photographer"><i class="fa-solid fa-user form-icon" aria-hidden="true"></i>撮影者</label>
                     <input type="text" id="input-photographer" class="form-input" placeholder="撮影者名" data-testid="photographer-input">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label" for="input-date">日付</label>
+                        <label class="form-label" for="input-date"><i class="fa-solid fa-calendar form-icon" aria-hidden="true"></i>日付</label>
                         <input type="date" id="input-date" class="form-input" data-testid="date-input">
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="input-location">
-                            <i class="fas fa-map-marker-alt" aria-hidden="true"></i>
-                            撮影場所
-                        </label>
+                        <label class="form-label" for="input-location"><i class="fa-solid fa-location-dot form-icon" aria-hidden="true"></i>場所</label>
                         <div class="location-input-wrap">
                             <input type="text" id="input-location" class="form-input" placeholder="場所を入力または取得">
                             <button class="icon-btn" id="btn-get-location" title="位置情報を取得" aria-label="位置情報を取得">
