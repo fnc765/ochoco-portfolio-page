@@ -1,179 +1,56 @@
 /**
- * PrintPhoto - E2Eテスト (Playwright)
+ * PrintPhoto - 主要フロー E2Eテスト (Playwright)
+ *
+ * ページ読み込み、画像アップロード、カメラ起動、撮影、テキスト入力、
+ * レスポンシブ等の基本動作を検証する。
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, openApp, uploadAndOpenCompose, takePictureAndOpenPreview } from './helpers.js';
 
-// =====================================
-// グローバルセットアップ: APIモック
-// =====================================
-test.beforeEach(async ({ context }) => {
-    await context.addInitScript(() => {
-        if (!navigator.mediaDevices) {
-            navigator.mediaDevices = {};
-        }
-        navigator.mediaDevices.getUserMedia = async () => new MediaStream();
-
-        navigator.geolocation.getCurrentPosition = (success) => {
-            success({ coords: { latitude: 35.0, longitude: 139.0 } });
-        };
-    });
-});
-
-// =====================================
-// ページ読み込み
-// =====================================
 test('E-P1: ページ読み込み・初期表示', async ({ page }) => {
-    await page.goto('/');
-    // ローディング後にメイン画面が表示されるまで待機
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-});
-
-// =====================================
-// ファイルアップロード
-// =====================================
-test('E-P2: 画像ファイルアップロード', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-
-    const input = page.locator('[data-testid="image-input"]');
-    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
-
-    await expect(page.locator('[data-testid="uploaded-preview"] img')).toBeVisible();
-});
-
-// =====================================
-// カメラ起動
-// =====================================
-test('E-P3: カメラ起動モック', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-
-    const input = page.locator('[data-testid="image-input"]');
-    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
-
-    await page.click('[data-testid="camera-start-btn"]');
-    // 合成画面に遷移
-    await expect(page.locator('#screen-compose')).toBeVisible();
-});
-
-// =====================================
-// 撮影後デバッグログ確認
-// =====================================
-test('E-P10: 撮影後デバッグログが表示される', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-
-    const input = page.locator('[data-testid="image-input"]');
-    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
-
-    // 画像処理が完了するまで待機
-    await page.waitForTimeout(500);
-
-    await page.click('[data-testid="camera-start-btn"]');
-    await expect(page.locator('#screen-compose')).toBeVisible();
-
-    // カメラ映像が準備できるまで待機（モックでも readyState >= 2 になるのを待つ）
-    await page.waitForTimeout(500);
-
-    await page.click('[data-testid="shutter-btn"]');
-    await expect(page.locator('#screen-preview')).toBeVisible();
-
-    // デバッグパネルが表示される
-    const debugPanel = page.locator('#debug-panel');
-    await expect(debugPanel).toBeVisible();
-
-    // スクリーンショットを撮影して視覚的に確認
-    await page.screenshot({ path: 'tests/e2e/test-results/debug-panel-visible.png', fullPage: true });
-
-    // デバッグログに takePicture の内容が含まれる
-    const debugLog = page.locator('#debug-log');
-    await expect(debugLog).toHaveValue(/takePicture/);
-});
-
-test('E-P16: デプロイ後のURLでデバッグログが表示される', async ({ page }) => {
-    await page.goto('https://ochoco-portfolio.pages.dev/print-photo/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-
-    const input = page.locator('[data-testid="image-input"]');
-    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
-
-    // 画像処理が完了するまで待機
-    await page.waitForTimeout(500);
-
-    await page.click('[data-testid="camera-start-btn"]');
-    await expect(page.locator('#screen-compose')).toBeVisible();
-
-    // カメラ映像が準備できるまで待機
-    await page.waitForTimeout(500);
-
-    await page.click('[data-testid="shutter-btn"]');
-    await expect(page.locator('#screen-preview')).toBeVisible();
-
-    // デバッグパネルが表示される
-    const debugPanel = page.locator('#debug-panel');
-    await expect(debugPanel).toBeVisible();
-
-    // スクリーンショットを撮影して視覚的に確認
-    await page.screenshot({ path: 'tests/e2e/test-results/deploy-debug-panel.png', fullPage: true });
-
-    // デバッグログに takePicture の内容が含まれる
-    const debugLog = page.locator('#debug-log');
-    await expect(debugLog).toHaveValue(/takePicture/);
-});
-
-test('E-P17: カメラ未対応時はトップ画面のままガイドを表示', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-
-    const input = page.locator('[data-testid="image-input"]');
-    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
-
-    await page.evaluate(() => {
-        Object.defineProperty(navigator, 'mediaDevices', {
-            configurable: true,
-            value: undefined,
-        });
-    });
-
-    await page.click('[data-testid="camera-start-btn"]');
-
+    await openApp(page);
     await expect(page.locator('#screen-top')).toBeVisible();
-    await expect(page.locator('#camera-permission-guide')).toContainText('カメラ機能に対応していません');
+    await expect(page.locator('[data-testid="image-input"]')).toBeAttached();
+    await expect(page.locator('[data-testid="camera-start-btn"]')).toBeDisabled();
 });
 
-test('E-P18: プレビューから戻るとカメラプレビューを再開する', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+test('E-P2: 画像ファイルアップロードで camera-start-btn が有効化される', async ({ page }) => {
+    await openApp(page);
+    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/green-screen.png');
+    await expect(page.locator('[data-testid="uploaded-preview"] img')).toBeVisible();
+    await expect(page.locator('[data-testid="camera-start-btn"]')).toBeEnabled();
+});
 
-    const input = page.locator('[data-testid="image-input"]');
-    await input.setInputFiles('tests/e2e/test-assets/green-screen.png');
+test('E-P3: カメラ起動で合成画面に遷移する', async ({ page }) => {
+    await uploadAndOpenCompose(page);
+    // 合成画面のパーツが存在することを確認
+    await expect(page.locator('#frame-content')).toBeVisible();
+    await expect(page.locator('#overlay-canvas')).toBeAttached();
+    await expect(page.locator('[data-testid="threshold-slider"]')).toBeAttached();
+    await expect(page.locator('[data-testid="shutter-btn"]')).toBeEnabled();
+});
+
+test('E-P4: 撮影でプレビュー画面に遷移し resultCanvas に描画される', async ({ page }) => {
+    await uploadAndOpenCompose(page);
     await page.waitForTimeout(500);
-
-    await page.click('[data-testid="camera-start-btn"]');
-    await expect(page.locator('#screen-compose')).toBeVisible();
-
-    await page.waitForTimeout(500);
-    await page.click('[data-testid="shutter-btn"]');
-    await expect(page.locator('#screen-preview')).toBeVisible();
-
-    await page.click('#btn-back-compose');
-    await expect(page.locator('#screen-compose')).toBeVisible();
-
-    const hasStream = await page.evaluate(() => {
-        return !!document.getElementById('camera-video')?.srcObject;
+    await takePictureAndOpenPreview(page);
+    // プレビュー画面の構成要素
+    await expect(page.locator('[data-testid="preview-view"]')).toBeVisible();
+    await expect(page.locator('[data-testid="title-input"]')).toBeVisible();
+    await expect(page.locator('[data-testid="photographer-input"]')).toBeVisible();
+    await expect(page.locator('[data-testid="date-input"]')).toBeVisible();
+    await expect(page.locator('[data-testid="share-btn"]')).toBeVisible();
+    // resultCanvas が意味のあるサイズにリサイズされている
+    const dim = await page.evaluate(() => {
+        const c = document.getElementById('result-canvas');
+        return { w: c.width, h: c.height };
     });
-    expect(hasStream).toBe(true);
+    expect(dim.w).toBeGreaterThan(500);
+    expect(dim.h).toBeGreaterThan(300);
 });
 
-// =====================================
-// テキスト入力・プレビュー
-// =====================================
-test('E-P9: 日付自動入力', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-
-    // ブラウザ内の日付と一致させる（タイムゾーン差対策）
+test('E-P9: 日付が今日の値で自動入力される', async ({ page }) => {
+    await openApp(page);
     const browserToday = await page.evaluate(() => {
         const d = new Date();
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -181,14 +58,69 @@ test('E-P9: 日付自動入力', async ({ page }) => {
     await expect(page.locator('[data-testid="date-input"]')).toHaveValue(browserToday);
 });
 
-// =====================================
-// レスポンシブ
-// =====================================
-test('E-P15: レスポンシブ（モバイルビューポート）', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/');
-    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+test('E-P10: 撮影後デバッグログに takePicture の内容が記録される', async ({ page }) => {
+    await uploadAndOpenCompose(page);
+    await page.waitForTimeout(500);
+    await takePictureAndOpenPreview(page);
+    const debugPanel = page.locator('#debug-panel');
+    await expect(debugPanel).toBeVisible();
+    const debugLog = page.locator('#debug-log');
+    await expect(debugLog).toHaveValue(/takePicture/);
+    await page.screenshot({ path: 'tests/e2e/test-results/debug-panel-visible.png', fullPage: true });
+});
 
+test('E-P15: モバイルビューポートでトップ画面にシャッターボタンが表示されない', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await openApp(page);
     const btn = page.locator('[data-testid="shutter-btn"]');
-    await expect(btn).toBeHidden(); // トップ画面では非表示
+    await expect(btn).toBeHidden();
+});
+
+test('E-P16: デプロイ後のURLでデバッグログが表示される', async ({ page }) => {
+    test.skip(!/localhost|127\.0\.0\.1/.test(process.env.PLAYWRIGHT_BASE_URL || ''),
+        'デプロイURLテストは本番デプロイが必要なためローカルCIでは skip');
+    await page.goto('https://ochoco-portfolio.pages.dev/print-photo/');
+    await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/green-screen.png');
+    await page.waitForTimeout(500);
+    await page.click('[data-testid="camera-start-btn"]');
+    await expect(page.locator('#screen-compose')).toBeVisible();
+    await page.waitForTimeout(500);
+    await takePictureAndOpenPreview(page);
+    const debugPanel = page.locator('#debug-panel');
+    await expect(debugPanel).toBeVisible();
+    const debugLog = page.locator('#debug-log');
+    await expect(debugLog).toHaveValue(/takePicture/);
+    await page.screenshot({ path: 'tests/e2e/test-results/deploy-debug-panel.png', fullPage: true });
+});
+
+test('E-P17: カメラ未対応時はトップ画面のままガイドを表示', async ({ page }) => {
+    await openApp(page);
+    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/green-screen.png');
+    // APIモックを解除
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, 'mediaDevices', {
+            configurable: true,
+            value: undefined,
+        });
+    });
+    await page.click('[data-testid="camera-start-btn"]');
+    await expect(page.locator('#screen-top')).toBeVisible();
+    await expect(page.locator('#camera-permission-guide')).toContainText('カメラ機能に対応していません');
+});
+
+test('E-P18: プレビューから戻るとカメラプレビューを再開する', async ({ page }) => {
+    await uploadAndOpenCompose(page);
+    await page.waitForTimeout(500);
+    await takePictureAndOpenPreview(page);
+    await page.click('#btn-back-compose');
+    await expect(page.locator('#screen-compose')).toBeVisible();
+    const hasStream = await page.evaluate(() => !!document.getElementById('camera-video')?.srcObject);
+    expect(hasStream).toBe(true);
+});
+
+test('E-P19: 戻るボタンでトップ画面に戻れる', async ({ page }) => {
+    await uploadAndOpenCompose(page);
+    await page.click('#btn-back-top');
+    await expect(page.locator('#screen-top')).toBeVisible();
 });
