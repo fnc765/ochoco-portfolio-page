@@ -805,12 +805,37 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ===================================
-   デバッグログ（DOM上は存在するが画面には描画されない）
-   ユーザー操作起点は「コンソールで window.PrintPhoto.copyDebugLogs()」を直接呼べばよく、
-   ボタン自体はレイアウト/描画に一切影響しない display:none とする。
+   デバッグログコピー用 不可視ボタン
+   - 画面右上に 16x16px のヒット領域を固定配置 (position: fixed)
+   - 完全に透明で見えないがクリック/タップに反応する
+   - モバイル DPR 環境でも sub-pixel 残像を出さないよう appearance を打ち消す
    =================================== */
 .debug-copy-hidden {
-    display: none;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
+    font-size: 0;
+    line-height: 0;
+    letter-spacing: 0;
+    text-indent: -9999px;
+    text-align: left;
+    opacity: 0;
+    cursor: default;
+    overflow: hidden;
+    pointer-events: auto;
+    outline: none;
+    box-shadow: none;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 2147483646;
 }
 
 /* ===================================

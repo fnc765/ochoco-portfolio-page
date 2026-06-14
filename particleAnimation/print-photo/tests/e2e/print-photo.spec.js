@@ -58,23 +58,37 @@ test('E-P9: 日付が今日の値で自動入力される', async ({ page }) => 
     await expect(page.locator('[data-testid="date-input"]')).toHaveValue(browserToday);
 });
 
-test('E-P10: 撮影後デバッグボタンでデバッグログをコピーできる', async ({ page }) => {
+test('E-P10: 撮影後画面右上の不可視ボタンでデバッグログをコピーできる', async ({ page }) => {
     await uploadAndOpenCompose(page);
     await page.waitForTimeout(500);
     await takePictureAndOpenPreview(page);
 
-    // 不可視ボタンは DOM 上に存在するが、display:none で描画されない
+    // 不可視ボタンはビューポート右上に 16x16 のヒット領域を持つ
     const btn = page.locator('[data-testid="copy-debug-btn"]');
     await expect(btn).toBeAttached();
-    const display = await btn.evaluate(el => getComputedStyle(el).display);
-    expect(display).toBe('none');
-
-    // boundingBox は null（描画されていないことを確認）
     const box = await btn.boundingBox();
-    expect(box).toBeNull();
+    expect(box).not.toBeNull();
+    expect(box.width).toBe(16);
+    expect(box.height).toBe(16);
 
-    // プログラム的にクリックイベントを発火 → クリップボードにコピー
-    await btn.evaluate(el => el.click());
+    // 画面右上に配置されている
+    const viewport = page.viewportSize();
+    expect(box.x).toBeGreaterThan(viewport.width - 32);
+    expect(box.y).toBe(0);
+
+    // 完全に透明で見えない
+    const cs = await btn.evaluate(el => {
+        const s = getComputedStyle(el);
+        return { bg: s.backgroundColor, color: s.color, opacity: s.opacity, border: s.border, boxShadow: s.boxShadow, fontSize: s.fontSize, lineHeight: s.lineHeight, position: s.position };
+    });
+    expect(cs.bg).toBe('rgba(0, 0, 0, 0)');
+    expect(cs.opacity).toBe('0');
+    expect(cs.border).toMatch(/^0px/);
+    expect(cs.boxShadow).toBe('none');
+    expect(cs.position).toBe('fixed');
+
+    // 実タップでクリップボードへコピーされる
+    await btn.click();
     const clip = await page.evaluate(async () => {
         await new Promise(r => setTimeout(r, 200));
         return await navigator.clipboard.readText();
@@ -100,7 +114,7 @@ test('E-P16: デプロイ後のURLでもデバッグログをコピーできる'
     await expect(page.locator('#screen-compose')).toBeVisible();
     await page.waitForTimeout(500);
     await takePictureAndOpenPreview(page);
-    await page.locator('[data-testid="copy-debug-btn"]').evaluate(el => el.click());
+    await page.locator('[data-testid="copy-debug-btn"]').click();
     const clip = await page.evaluate(async () => {
         await new Promise(r => setTimeout(r, 200));
         return await navigator.clipboard.readText();

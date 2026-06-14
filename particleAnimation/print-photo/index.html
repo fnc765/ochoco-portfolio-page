@@ -54,6 +54,8 @@
          メインコンテンツ
          ===================================== -->
     <main id="content" style="display:none;" data-testid="main-view">
+        <!-- デバッグログコピー用の不可視ボタン (画面右上に固定、視覚的には完全に見えない) -->
+        <button type="button" id="btn-copy-debug" class="debug-copy-hidden" aria-label="デバッグログをコピー" data-testid="copy-debug-btn"></button>
         <!-- ヘッダー -->
         <header class="page-header">
             <a href="../" class="back-link" aria-label="ポートフォリオに戻る">
@@ -62,7 +64,6 @@
             </a>
             <h1 class="page-title">PrintPhoto</h1>
             <p class="page-subtitle">VRChatアバターを現実世界と合成しよう</p>
-            <button type="button" id="btn-copy-debug" class="debug-copy-hidden" aria-label="デバッグログをコピー" data-testid="copy-debug-btn"></button>
         </header>
 
         <!-- =================================
