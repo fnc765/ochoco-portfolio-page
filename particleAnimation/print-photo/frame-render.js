@@ -209,6 +209,13 @@ export function renderFrame(opts) {
     return canvas;
 }
 
+const FA_ICON_USER = '\uF007';
+const FA_ICON_CALENDAR = '\uF133';
+const FA_ICON_LOCATION = '\uF3C5';
+const FA_FONT = '"Font Awesome 6 Free"';
+const FA_FONT_WEIGHT = '900';
+const META_ICON_COLOR = '#666666';
+
 function drawFrameText(ctx, opts, scale, W, H) {
     const fontFamily = "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif";
     ctx.fillStyle = '#000000';
@@ -245,25 +252,53 @@ function drawFrameText(ctx, opts, scale, W, H) {
         });
     }
 
-    // 撮影者（左下）
+    // 撮影者（左下：アイコン + ラベル + 名前）
     if (opts.photographer) {
         const metaSize = Math.round(28 * scale);
-        ctx.font = `400 ${metaSize}px ${fontFamily}`;
         ctx.textAlign = 'left';
-        ctx.fillText(`撮影者: ${opts.photographer}`, marginX, bottomY);
+        ctx.textBaseline = 'bottom';
+        let x = marginX;
+        ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+        ctx.fillStyle = META_ICON_COLOR;
+        ctx.fillText(FA_ICON_USER, x, bottomY);
+        x += ctx.measureText(FA_ICON_USER).width + Math.round(6 * scale);
+        ctx.font = `400 ${metaSize}px ${fontFamily}`;
+        ctx.fillStyle = '#000000';
+        ctx.fillText(`撮影者: ${opts.photographer}`, x, bottomY);
     }
 
-    // 日付・場所（右下）
-    let rightText = '';
-    if (opts.date) rightText += opts.date;
-    if (opts.location) {
-        rightText += (rightText ? '  ' : '') + opts.location;
-    }
-    if (rightText) {
+    // 日付・場所（右下：アイコン + 値 + アイコン + 値）
+    const hasDate = !!opts.date;
+    const hasLoc = !!opts.location;
+    if (hasDate || hasLoc) {
         const metaSize = Math.round(28 * scale);
-        ctx.font = `400 ${metaSize}px ${fontFamily}`;
-        ctx.textAlign = 'right';
-        ctx.fillText(rightText, W - marginX, bottomY);
+        const gap = Math.round(6 * scale);
+
+        const segs = [];
+        if (hasDate) segs.push({ icon: FA_ICON_CALENDAR, text: opts.date });
+        if (hasLoc) segs.push({ icon: FA_ICON_LOCATION, text: opts.location });
+
+        ctx.textBaseline = 'bottom';
+        const widths = segs.map(seg => {
+            ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+            const iconW = ctx.measureText(seg.icon).width;
+            ctx.font = `400 ${metaSize}px ${fontFamily}`;
+            const textW = ctx.measureText(seg.text).width;
+            return iconW + gap + textW;
+        });
+        const totalW = widths.reduce((a, b) => a + b, 0) + gap * (segs.length - 1);
+
+        let x = W - marginX - totalW;
+        segs.forEach((seg, i) => {
+            ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+            ctx.fillStyle = META_ICON_COLOR;
+            ctx.fillText(seg.icon, x, bottomY);
+            x += ctx.measureText(seg.icon).width + gap;
+            ctx.font = `400 ${metaSize}px ${fontFamily}`;
+            ctx.fillStyle = '#000000';
+            ctx.fillText(seg.text, x, bottomY);
+            x += ctx.measureText(seg.text).width + gap;
+        });
     }
 }
 

@@ -84,6 +84,12 @@ const previewFrame = document.getElementById('preview-frame');
 // =====================================
 // 状態
 // =====================================
+const FA_ICON_USER = '\uF007';
+const FA_ICON_CALENDAR = '\uF133';
+const FA_ICON_LOCATION = '\uF3C5';
+const FA_FONT = '"Font Awesome 6 Free"';
+const FA_FONT_WEIGHT = '900';
+
 let currentScreen = 'top';
 let selectedImageFile = null;
 let selectedImageDataUrl = null;
@@ -1045,6 +1051,14 @@ async function takePicture() {
         });
 
         addDebugLog('takePicture-before-renderFrame', { readyState: videoElement.readyState, srcObject: !!videoElement.srcObject });
+        const metaSize = Math.round(28);
+        if (document.fonts && document.fonts.load) {
+            try {
+                await document.fonts.load(`${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}`);
+            } catch (e) {
+                // フォールバック：何もしない
+            }
+        }
         let frameCanvas;
         try {
             frameCanvas = renderFrame({
@@ -1099,9 +1113,13 @@ async function takePicture() {
 function syncFrameTextLayer() {
     document.getElementById('frame-title').textContent = inputTitle.value;
     document.getElementById('frame-comment').textContent = inputComment.value;
-    document.getElementById('frame-photographer').textContent = inputPhotographer.value ? `撮影者: ${inputPhotographer.value}` : '';
-    const dateLoc = [inputDate.value, inputLocation.value].filter(Boolean).join('  ');
-    document.getElementById('frame-date-location').textContent = dateLoc;
+    const photographerEl = document.getElementById('frame-photographer');
+    photographerEl.querySelector('.meta-text').textContent = inputPhotographer.value;
+    photographerEl.style.display = inputPhotographer.value ? '' : 'none';
+    const dateLocEl = document.getElementById('frame-date-location');
+    dateLocEl.querySelector('.meta-date-text').textContent = inputDate.value;
+    dateLocEl.querySelector('.meta-loc-text').textContent = inputLocation.value;
+    dateLocEl.style.display = (inputDate.value || inputLocation.value) ? '' : 'none';
 }
 
 // =====================================
@@ -1109,6 +1127,16 @@ function syncFrameTextLayer() {
 // =====================================
 function updatePreviewFrame() {
     if (currentScreen !== 'preview' || !resultCanvas.width) return;
+
+    const metaSize = Math.round(28 * (resultCanvas.width / 2048));
+    if (document.fonts && document.fonts.load && !document.fonts.check(`${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}`)) {
+        document.fonts.load(`${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}`).then(() => {
+            if (currentScreen === 'preview' && resultCanvas.width) {
+                updatePreviewFrame();
+            }
+        }).catch(() => {});
+        return;
+    }
 
     const ctx = resultCanvas.getContext('2d');
     const W = resultCanvas.width;
@@ -1158,21 +1186,57 @@ function updatePreviewFrame() {
         });
     }
 
-    // 撮影者
+    // 撮影者（アイコン + ラベル + 名前）
     if (inputPhotographer.value) {
         const metaSize = Math.round(28 * scale);
-        ctx.font = `400 ${metaSize}px ${fontFamily}`;
         ctx.textAlign = 'left';
-        ctx.fillText(`撮影者: ${inputPhotographer.value}`, marginX, bottomY);
+        ctx.textBaseline = 'bottom';
+        let x = marginX;
+        ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+        ctx.fillStyle = '#666666';
+        ctx.fillText(FA_ICON_USER, x, bottomY);
+        x += ctx.measureText(FA_ICON_USER).width + Math.round(6 * scale);
+        ctx.font = `400 ${metaSize}px ${fontFamily}`;
+        ctx.fillStyle = '#000000';
+        ctx.fillText(`撮影者: ${inputPhotographer.value}`, x, bottomY);
     }
 
-    // 日付・場所
-    const rightText = [inputDate.value, inputLocation.value].filter(Boolean).join('  ');
-    if (rightText) {
+    // 日付・場所（右寄せ、アイコン + 値 + アイコン + 値）
+    const hasDate = !!inputDate.value;
+    const hasLoc = !!inputLocation.value;
+    if (hasDate || hasLoc) {
         const metaSize = Math.round(28 * scale);
-        ctx.font = `400 ${metaSize}px ${fontFamily}`;
-        ctx.textAlign = 'right';
-        ctx.fillText(rightText, W - marginX, bottomY);
+        const gap = Math.round(6 * scale);
+
+        const segs = [];
+        if (hasDate) {
+            segs.push({ icon: FA_ICON_CALENDAR, text: inputDate.value });
+        }
+        if (hasLoc) {
+            segs.push({ icon: FA_ICON_LOCATION, text: inputLocation.value });
+        }
+
+        ctx.textBaseline = 'bottom';
+        const widths = segs.map(seg => {
+            ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+            const iconW = ctx.measureText(seg.icon).width;
+            ctx.font = `400 ${metaSize}px ${fontFamily}`;
+            const textW = ctx.measureText(seg.text).width;
+            return iconW + gap + textW;
+        });
+        const totalW = widths.reduce((a, b) => a + b, 0) + gap * (segs.length - 1);
+
+        let x = W - marginX - totalW;
+        segs.forEach((seg, i) => {
+            ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+            ctx.fillStyle = '#666666';
+            ctx.fillText(seg.icon, x, bottomY);
+            x += ctx.measureText(seg.icon).width + gap;
+            ctx.font = `400 ${metaSize}px ${fontFamily}`;
+            ctx.fillStyle = '#000000';
+            ctx.fillText(seg.text, x, bottomY);
+            x += ctx.measureText(seg.text).width + gap;
+        });
     }
 }
 

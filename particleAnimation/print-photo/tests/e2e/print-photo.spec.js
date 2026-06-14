@@ -152,3 +152,24 @@ test('E-P19: 戻るボタンでトップ画面に戻れる', async ({ page }) =>
     await page.click('#btn-back-top');
     await expect(page.locator('#screen-top')).toBeVisible();
 });
+
+test('E-P20: メタ情報欄に Font Awesome のアイコンが表示される', async ({ page }) => {
+    await uploadAndOpenCompose(page);
+    await page.waitForTimeout(500);
+    await takePictureAndOpenPreview(page);
+
+    await page.locator('#input-photographer').fill('エーイ A. Eila');
+    await page.locator('#input-location').fill('Spagonia by Silent');
+    await page.waitForTimeout(300);
+
+    await expect(page.locator('#frame-photographer .fa-user')).toHaveClass(/meta-icon/);
+    await expect(page.locator('#frame-date-location .fa-calendar')).toHaveClass(/meta-icon/);
+    await expect(page.locator('#frame-date-location .fa-location-dot')).toHaveClass(/meta-icon/);
+
+    const photographerText = await page.locator('#frame-photographer .meta-text').textContent();
+    expect(photographerText).toBe('エーイ A. Eila');
+    const dateText = await page.locator('#frame-date-location .meta-date-text').textContent();
+    const locText = await page.locator('#frame-date-location .meta-loc-text').textContent();
+    expect(locText).toBe('Spagonia by Silent');
+    expect(dateText).not.toBe('');
+});
