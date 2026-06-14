@@ -327,11 +327,16 @@ html, body {
     height: 100%;
     display: none;
     background: #fff;
+    z-index: 2;
 }
 
 #photo-frame.pp-captured .camera-video,
 #photo-frame.pp-captured .overlay-canvas {
     display: none;
+}
+
+#photo-frame.pp-captured .frame-content {
+    visibility: hidden;
 }
 
 #photo-frame.pp-captured #result-canvas {
