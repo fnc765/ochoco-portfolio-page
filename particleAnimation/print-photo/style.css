@@ -600,35 +600,6 @@ html, body {
     border: 2px solid #fff;
 }
 
-.color-picker-display {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 0.5rem;
-    cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: border-color 0.2s ease;
-}
-
-.color-picker-display:hover {
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-.color-dot {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    flex-shrink: 0;
-}
-
-.color-value {
-    font-size: 0.85rem;
-    opacity: 0.6;
-}
-
 /* ===================================
    プレビュー画面
    =================================== */

@@ -1,22 +1,37 @@
 /**
- * PrintPhoto - メインスクリプト (フェーズ1+2+3: 基盤 + クロマキー + カメラ合成)
+ * PrintPhoto - メインスクリプト (透過画像読み込み + カメラ合成)
+ *
+ * 透過PNG画像を読み込み、カメラ映像とリアルタイム合成してフレーム付き
+ * 写真を生成・保存・共有する。クロマキー処理は廃止し、入力画像は
+ * アルファチャンネル付きの透過画像に統一している。
  */
-
-import {
-    loadImageToCanvas,
-    applyChromaKey,
-    applyChromaKeyPreview,
-    mapContainPointToNormalized,
-    pickColor,
-    rgbToHex,
-    hasTransparency,
-} from './chroma-key.js';
 
 import {
     startCamera,
     stopCamera,
     setActiveStream,
 } from './camera.js';
+
+/**
+ * 画像を読み込んでCanvasに描画する
+ * @param {string} src - DataURL または URL
+ * @returns {Promise<HTMLCanvasElement>}
+ */
+function loadImageToCanvas(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas);
+        };
+        img.onerror = reject;
+        img.src = src;
+    });
+}
 
 import { renderFrame } from './frame-render.js';
 
@@ -59,13 +74,9 @@ let videoElement = document.getElementById('camera-video');
 const overlayCanvas = document.getElementById('overlay-canvas');
 const frameContent = document.getElementById('frame-content');
 
-const thresholdSlider = document.getElementById('threshold-slider');
-const featherSlider = document.getElementById('feather-slider');
 const brightnessSlider = document.getElementById('brightness-slider');
 const contrastSlider = document.getElementById('contrast-slider');
 const temperatureSlider = document.getElementById('temperature-slider');
-const colorDot = document.getElementById('color-dot');
-const colorValue = document.querySelector('.color-value');
 
 const inputTitle = document.getElementById('input-title');
 const inputPhotographer = document.getElementById('input-photographer');
@@ -102,7 +113,6 @@ let selectedImageDataUrl = null;
 let originalImageCanvas = null;
 let processedImageCanvas = null;
 let currentPreviewCanvas = null;
-let targetColor = { r: 0, g: 255, b: 0 };
 
 // オーバーレイ変形状態
 const overlayTransform = { x: 0, y: 0, scale: 1 };
@@ -529,18 +539,10 @@ function bindEvents() {
         });
     });
 
-    // クロマキー調整
-    thresholdSlider.addEventListener('input', () => renderPreview());
-    featherSlider.addEventListener('input', () => renderPreview());
-
     // 露光調整
     brightnessSlider.addEventListener('input', updateExposure);
     contrastSlider.addEventListener('input', updateExposure);
     temperatureSlider.addEventListener('input', updateExposure);
-
-    // 色ピックアップ
-    uploadPreview.addEventListener('click', handleColorPick);
-    overlayCanvas.addEventListener('click', handleOverlayColorPick);
 
     // ドラッグ・ピンチ（overlay-canvas）
     overlayCanvas.addEventListener('pointerdown', handlePointerDown);
@@ -802,7 +804,7 @@ function redrawOverlayCanvas() {
 }
 
 // =====================================
-// ファイル選択 + クロマキー初期化
+// ファイル選択 + 透過画像読み込み
 // =====================================
 async function handleFileSelect(e) {
     const file = e.target.files[0];
@@ -819,18 +821,11 @@ async function handleFileSelect(e) {
 
         try {
             originalImageCanvas = await loadImageToCanvas(selectedImageDataUrl);
-
-            // 透過画像判定（PNG等、すでに透過している場合はクロマキースキップ）
-            const isTransparent = hasTransparency(originalImageCanvas);
-            if (isTransparent) {
-                processedImageCanvas = originalImageCanvas;
-                currentPreviewCanvas = originalImageCanvas;
-                redrawOverlayCanvas();
-                applyOverlayTransform();
-                showToast('透過画像を読み込みました');
-            } else {
-                await renderPreview();
-            }
+            processedImageCanvas = originalImageCanvas;
+            currentPreviewCanvas = originalImageCanvas;
+            redrawOverlayCanvas();
+            applyOverlayTransform();
+            showToast('透過画像を読み込みました');
 
             // フルサイズDataURLを履歴保存
             try {
@@ -845,21 +840,6 @@ async function handleFileSelect(e) {
         }
     };
     reader.readAsDataURL(file);
-}
-
-// =====================================
-// クロマキープレビュー描画
-// =====================================
-function renderPreview() {
-    if (!originalImageCanvas) return;
-
-    const threshold = parseInt(thresholdSlider.value, 10);
-    const feather = parseInt(featherSlider.value, 10);
-
-    currentPreviewCanvas = applyChromaKeyPreview(originalImageCanvas, targetColor, threshold, feather);
-    processedImageCanvas = applyChromaKey(originalImageCanvas, targetColor, threshold, feather);
-
-    redrawOverlayCanvas();
 }
 
 // =====================================
@@ -925,51 +905,6 @@ function handleTouchEnd(e) {
     if (e.touches.length < 2) {
         pinchStartDist = 0;
     }
-}
-
-// =====================================
-// 色ピックアップ
-// =====================================
-function handleColorPick(e) {
-    if (!originalImageCanvas) return;
-    const previewImage = uploadPreview.querySelector('img');
-    const rect = previewImage ? previewImage.getBoundingClientRect() : uploadPreview.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const color = pickColor(originalImageCanvas, x, y, true);
-    if (color && color.a > 0) {
-        setTargetColor(color.r, color.g, color.b);
-    }
-}
-
-function handleOverlayColorPick(e) {
-    if (!originalImageCanvas || !currentPreviewCanvas) return;
-    const rect = overlayCanvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const mapped = mapContainPointToNormalized(
-        x * overlayCanvas.width,
-        y * overlayCanvas.height,
-        currentPreviewCanvas.width,
-        currentPreviewCanvas.height,
-        overlayCanvas.width,
-        overlayCanvas.height
-    );
-    if (!mapped) return;
-
-    const color = pickColor(originalImageCanvas, mapped.x, mapped.y, true);
-    if (color && color.a > 0) {
-        setTargetColor(color.r, color.g, color.b);
-    }
-}
-
-function setTargetColor(r, g, b) {
-    targetColor = { r, g, b };
-    colorDot.style.background = rgbToHex(r, g, b);
-    colorValue.textContent = `R:${r} G:${g} B:${b}`;
-    renderPreview();
 }
 
 // =====================================
@@ -1567,15 +1502,10 @@ function renderThumbnails(thumbs) {
                 cameraStartBtn.disabled = false;
 
                 originalImageCanvas = await loadImageToCanvas(dataUrl);
-            const isTransparent = hasTransparency(originalImageCanvas);
-            if (isTransparent) {
                 processedImageCanvas = originalImageCanvas;
                 currentPreviewCanvas = originalImageCanvas;
                 redrawOverlayCanvas();
                 applyOverlayTransform();
-            } else {
-                await renderPreview();
-            }
             } catch (err) {
                 console.error('Load from history failed:', err);
                 showToast('履歴からの読み込みに失敗しました');
@@ -1614,6 +1544,5 @@ window.PrintPhoto = {
     selectedImageDataUrl: () => selectedImageDataUrl,
     getProcessedCanvas: () => processedImageCanvas,
     getOriginalCanvas: () => originalImageCanvas,
-    getTargetColor: () => targetColor,
     getOverlayTransform: () => overlayTransform,
 };

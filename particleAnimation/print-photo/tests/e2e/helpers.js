@@ -8,7 +8,7 @@
 
 import { test as base, expect } from '@playwright/test';
 
-export const TEST_IMAGE = 'tests/e2e/test-assets/green-screen.png';
+export const TEST_IMAGE = 'tests/e2e/test-assets/transparent-sample.png';
 
 /**
  * navigator.mediaDevices.getUserMedia と geolocation をモックする init script。

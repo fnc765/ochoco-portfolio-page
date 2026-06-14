@@ -21,7 +21,6 @@ particleAnimation/print-photo/
 │   ├── setup.js              # vitest 用 jsdom + Canvas mock
 │   ├── unit/                 # ユニットテスト (vitest, jsdom)
 │   │   ├── frame-render.test.js
-│   │   ├── chroma-key.test.js
 │   │   ├── debug-log.test.js
 │   │   ├── location.test.js
 │   │   └── storage.test.js
@@ -29,17 +28,20 @@ particleAnimation/print-photo/
 │       ├── helpers.js        # 共通ヘルパー (★まずこれを読む)
 │       ├── print-photo.spec.js
 │       ├── temperature.spec.js
-│       ├── exposure-chromakey.spec.js
-│       ├── text-color.spec.js
+│       ├── exposure.spec.js
+│       ├── text-input.spec.js
 │       ├── save-share.spec.js
+│       ├── title-font.spec.js
 │       ├── test-assets/
-│       │   └── green-screen.png
+│       │   └── transparent-sample.png
 │       └── test-results/     # スクリーンショット・trace出力先
 ├── playwright.config.js      # baseURL=http://localhost:8080, chromium
 ├── vitest.config.js          # jsdom, exclude=tests/e2e/**
 ├── package.json              # scripts: test, e2e, serve
 └── index.html, script.js, frame-render.js, camera.js, ...
 ```
+
+> **注**: 旧版にあった `chroma-key.test.js`（ユニット）と `exposure-chromakey.spec.js` / `text-color.spec.js`（e2e）、`green-screen.png` はクロマキー処理廃止に伴い削除した。入力画像はアルファ付き透過PNG (`transparent-sample.png`) に統一されている。
 
 ## ユニットテストとe2eの使い分け
 
@@ -121,8 +123,6 @@ expect(filters.some(f => f.includes('hue-rotate(90deg)'))).toBe(true);
   - E-P*: 主要フロー (Print-photo)
   - E-T*: 色温度 (Temperature)
   - E-E*: 露光 (Exposure)
-  - E-K*: クロマキー (Key)
-  - E-C*: 色ピックアップ (Color)
   - E-TX*: テキスト入力 (TeXt)
   - E-S*: 保存・共有 (Save/Share)
   - E-LW*: 位置情報警告 (Location Warning)

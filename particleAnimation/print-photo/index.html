@@ -9,20 +9,20 @@
     <title>PrintPhoto - おちょこ</title>
 
     <!-- SEO Meta Tags -->
-    <meta name="description" content="VRChatアバターを現実世界と合成してフレーム付き写真を作ろう">
-    <meta name="keywords" content="おちょこ, ochoco, PrintPhoto, VRChat, グリーンバック, 合成カメラ">
+    <meta name="description" content="透過PNG画像をカメラ映像とリアルタイム合成してフレーム付き写真を作ろう">
+    <meta name="keywords" content="おちょこ, ochoco, PrintPhoto, 透過画像, 合成カメラ, AR合成">
     <meta name="author" content="おちょこ">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="PrintPhoto - おちょこ">
-    <meta property="og:description" content="VRChatアバターを現実世界と合成してフレーム付き写真を作ろう">
+    <meta property="og:description" content="透過PNG画像をカメラ映像とリアルタイム合成してフレーム付き写真を作ろう">
     <meta property="og:image" content="https://fnchoco.com/images/profile.png">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:title" content="PrintPhoto - おちょこ">
-    <meta property="twitter:description" content="VRChatアバターを現実世界と合成してフレーム付き写真を作ろう">
+    <meta property="twitter:description" content="透過PNG画像をカメラ映像とリアルタイム合成してフレーム付き写真を作ろう">
 
     <!-- Theme Color -->
     <meta name="theme-color" content="#141414">
@@ -63,7 +63,7 @@
                 <span>Portfolio</span>
             </a>
             <h1 class="page-title">PrintPhoto</h1>
-            <p class="page-subtitle">VRChatアバターを現実世界と合成しよう</p>
+            <p class="page-subtitle">透過PNG画像をカメラ映像と合成しよう</p>
         </header>
 
         <!-- =================================
@@ -76,7 +76,7 @@
                 <label for="image-input" class="upload-label">
                     <i class="fas fa-image upload-icon" aria-hidden="true"></i>
                     <span class="upload-text">画像を選択</span>
-                    <span class="upload-hint">グリーンバック画像を読み込みます</span>
+                    <span class="upload-hint">透過PNG（α付き）を読み込みます</span>
                 </label>
                 <div class="upload-preview" id="upload-preview" data-testid="uploaded-preview"></div>
             </div>
@@ -136,28 +136,6 @@
 
             <!-- 調整パネル -->
             <div class="controls-panel glass-card">
-                <div class="control-group">
-                    <label class="control-label">
-                        <i class="fas fa-eye-dropper" aria-hidden="true"></i>
-                        背景色
-                    </label>
-                    <div class="color-picker-display" id="color-picker-display">
-                        <span class="color-dot" id="color-dot" style="background:#00ff00;"></span>
-                        <span class="color-value">タップで色を選択</span>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <label class="control-label" for="threshold-slider">
-                        透過閾値
-                    </label>
-                    <input type="range" id="threshold-slider" class="slider" min="0" max="100" value="30" data-testid="threshold-slider">
-                </div>
-                <div class="control-group">
-                    <label class="control-label" for="feather-slider">
-                        エッジ柔らかさ
-                    </label>
-                    <input type="range" id="feather-slider" class="slider" min="0" max="20" value="3">
-                </div>
                 <div class="control-group">
                     <label class="control-label" for="brightness-slider">
                         明るさ

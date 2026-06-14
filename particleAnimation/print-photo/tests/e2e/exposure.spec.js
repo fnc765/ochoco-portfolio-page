@@ -1,8 +1,8 @@
 /**
- * PrintPhoto - 露光・クロマキー調整 E2Eテスト
+ * PrintPhoto - 露光調整 E2Eテスト
  *
- * brightness, contrast, threshold, feather スライダーが ctx.filter に
- * 正しく反映されることを実機Chromiumで検証する。
+ * brightness, contrast スライダーが ctx.filter に正しく反映されることを
+ * 実機Chromiumで検証する。色温度の検証は temperature.spec.js を参照。
  */
 
 import { test, expect, uploadAndOpenCompose, captureFilterOnDraw, snapshotSlider } from './helpers.js';
@@ -61,55 +61,5 @@ test.describe('露光調整 (brightness / contrast)', () => {
             await page.waitForTimeout(300);
             await page.screenshot({ path: `tests/e2e/test-results/exposure-${label}.png`, fullPage: true });
         }
-    });
-});
-
-test.describe('クロマキー調整 (threshold / feather)', () => {
-    test('E-K1: threshold / feather スライダーが DOM に存在する', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        await expect(page.locator('#threshold-slider')).toBeAttached();
-        await expect(page.locator('#feather-slider')).toBeAttached();
-    });
-
-    test('E-K2: threshold スライダーの属性と初期値', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        const snap = await snapshotSlider(page, 'threshold-slider');
-        expect(snap.value).toBe('30');
-        expect(snap.min).toBe('0');
-        expect(snap.max).toBe('100');
-    });
-
-    test('E-K3: feather スライダーの属性と初期値', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        const snap = await snapshotSlider(page, 'feather-slider');
-        expect(snap.value).toBe('3');
-        expect(snap.min).toBe('0');
-        expect(snap.max).toBe('20');
-    });
-
-    test('E-K4: threshold 値変更で currentPreviewCanvas のサイズが変化する', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        // クロマキー処理結果のサイズ・内容が変わることを確認
-        const sizeBefore = await page.evaluate(() => {
-            const c = document.getElementById('overlay-canvas');
-            return { w: c.width, h: c.height };
-        });
-        await page.evaluate(() => {
-            const t = document.getElementById('threshold-slider');
-            t.value = '80';
-            t.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(300);
-        const sizeAfter = await page.evaluate(() => {
-            const c = document.getElementById('overlay-canvas');
-            return { w: c.width, h: c.height };
-        });
-        // overlay-canvas のサイズは保持され、再描画が走っている
-        expect(sizeAfter.w).toBe(sizeBefore.w);
-        expect(sizeAfter.h).toBe(sizeBefore.h);
-        // 70 = 80 * 0.9 + feather3 → ctx.filter は none のはず
-        // (threshold は ctx.filter ではなくピクセル処理)
-        const filters = await captureFilterOnDraw(page, 'feather-slider', 10);
-        expect(filters.every(f => f === 'none')).toBe(true);
     });
 });

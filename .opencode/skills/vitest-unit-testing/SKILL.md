@@ -8,7 +8,7 @@ description: vitest によるユニットテスト作成スキル。jsdom + Canv
 ## このスキルが有効なケース
 
 - `particleAnimation/print-photo/tests/unit/` に新しいテストファイルを追加するとき
-- Canvas API に依存するロジック（chroma-key, frame-render 等）のテストを書くとき
+- Canvas API に依存するロジック（frame-render 等）のテストを書くとき
 - IndexedDB をモックしてテストするとき
 - 純粋関数 (date utils, location utils, storage utils 等) のテストを書くとき
 - テストの「何をユニットで」「何をe2eで」検証するか判断するとき
@@ -21,7 +21,6 @@ particleAnimation/print-photo/
 ├── tests/
 │   ├── setup.js               # MockCanvasElement, MockCanvasRenderingContext2D, FakeIDB
 │   ├── unit/                  # ユニットテスト
-│   │   ├── chroma-key.test.js
 │   │   ├── frame-render.test.js
 │   │   ├── debug-log.test.js
 │   │   ├── location.test.js
@@ -273,10 +272,9 @@ describe('API client', () => {
 
 ## 命名規則
 
-- ファイル名: `<module>.test.js`（`chroma-key.test.js`, `frame-render.test.js`）
+- ファイル名: `<module>.test.js`（`frame-render.test.js`, `storage.test.js`）
 - テスト名: `U-<2文字ID>-<連番>: <検証内容の日本語>`
   - U-F*: frame-render
-  - U-C*: chroma-key
   - U-D*: debug-log
   - U-L*: location
   - U-S*: storage

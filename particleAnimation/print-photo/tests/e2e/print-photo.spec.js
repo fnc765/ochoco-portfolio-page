@@ -16,7 +16,7 @@ test('E-P1: ページ読み込み・初期表示', async ({ page }) => {
 
 test('E-P2: 画像ファイルアップロードで camera-start-btn が有効化される', async ({ page }) => {
     await openApp(page);
-    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/green-screen.png');
+    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/transparent-sample.png');
     await expect(page.locator('[data-testid="uploaded-preview"] img')).toBeVisible();
     await expect(page.locator('[data-testid="camera-start-btn"]')).toBeEnabled();
 });
@@ -26,7 +26,6 @@ test('E-P3: カメラ起動で合成画面に遷移する', async ({ page }) => 
     // 合成画面のパーツが存在することを確認
     await expect(page.locator('#frame-content')).toBeVisible();
     await expect(page.locator('#overlay-canvas')).toBeAttached();
-    await expect(page.locator('[data-testid="threshold-slider"]')).toBeAttached();
     await expect(page.locator('[data-testid="shutter-btn"]')).toBeEnabled();
 });
 
@@ -108,7 +107,7 @@ test('E-P16: デプロイ後のURLでもデバッグログをコピーできる'
         'デプロイURLテストは本番デプロイが必要なためローカルCIでは skip');
     await page.goto('https://ochoco-portfolio.pages.dev/print-photo/');
     await expect(page.locator('[data-testid="main-view"]')).toBeVisible({ timeout: 10000 });
-    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/green-screen.png');
+    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/transparent-sample.png');
     await page.waitForTimeout(500);
     await page.click('[data-testid="camera-start-btn"]');
     await expect(page.locator('#screen-compose')).toBeVisible();
@@ -124,7 +123,7 @@ test('E-P16: デプロイ後のURLでもデバッグログをコピーできる'
 
 test('E-P17: カメラ未対応時はトップ画面のままガイドを表示', async ({ page }) => {
     await openApp(page);
-    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/green-screen.png');
+    await page.locator('[data-testid="image-input"]').setInputFiles('tests/e2e/test-assets/transparent-sample.png');
     // APIモックを解除
     await page.evaluate(() => {
         Object.defineProperty(navigator, 'mediaDevices', {

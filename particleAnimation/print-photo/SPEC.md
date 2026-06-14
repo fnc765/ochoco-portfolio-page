@@ -6,10 +6,10 @@
 |---|---|
 | **サービス名** | PrintPhoto |
 | **ハッシュタグ** | `#PrintPhoto` |
-| **概要** | ブラウザ上でカメラ映像と透過画像をリアルタイム合成し、フレーム付き画像を生成・保存・共有できるローカル完結型の静的ページ |
+| **概要** | ブラウザ上でカメラ映像と透過PNG画像をリアルタイム合成し、フレーム付き画像を生成・保存・共有できるローカル完結型の静的ページ |
 | **配置場所** | `particleAnimation/print-photo/` |
 | **サーバー役割** | 静的サイト配信のみ。画像処理・保存は一切行わない |
-| **ターゲット** | VRChatユーザーなど、グリーンバック画像を現実世界の風景と合成したい人 |
+| **ターゲット** | VRChatユーザーなど、アルファチャンネル付き透過画像を現実世界の風景と合成したい人 |
 
 ---
 
@@ -59,11 +59,11 @@
 | 項目 | 仕様 |
 |---|---|
 | **入力方法** | `<input type="file" accept="image/*">` でファイル選択 |
-| **デフォルト透過方式** | グリーンバック（クロマキー）透過 |
-| **色選択** | 画像読み込み後、Canvas上で**タップ/クリック**で背景色をピックアップして選択可能 |
-| **調整パラメータ** | 色の閾値、エッジの柔らかさ（feather）、スムージング |
-| **処理方式** | HTML5 Canvas 2D API でピクセル単位処理（ローカル完結） |
-| **サムネイルキャッシュ** | `IndexedDB` で過去に読み込んだ画像のサムネイルを保存。上限**10件**。手動削除可能 |
+| **デフォルト入力形式** | **アルファチャンネル付きPNG**（透過PNG）。JPEG等の非透過画像はアルファ値0の領域が黒で塗りつぶされて表示される |
+| **色選択** | なし。クロマキー処理は廃止し、入力画像が持つアルファチャンネルをそのまま利用する |
+| **調整パラメータ** | なし（透過処理に関するスライダーは削除） |
+| **処理方式** | 読み込んだ画像をそのままCanvasに描画し、HTML5 Canvas 2D APIの標準合成（`globalCompositeOperation = 'source-over'`）でカメラ映像に重ねる。ピクセル単位の自前処理は実施しない（ローカル完結） |
+| **サムネイルキャッシュ** | `IndexedDB` で過去に読み込んだ画像のサムネイル（DataURL/Blob）を保存。上限**10件**。手動削除可能 |
 
 ### 4.2 カメラ合成ビュー
 
@@ -139,7 +139,7 @@
 | 層 | 技術 |
 |---|---|
 | **フロントエンド** | HTML5, CSS3, JavaScript（Vanilla） |
-| **画像処理** | HTML5 Canvas 2D API（クロマキー/透過/合成） |
+| **画像処理** | HTML5 Canvas 2D API（透過PNG合成。クロマキー処理はなし） |
 | **カメラ** | `getUserMedia` API |
 | **位置情報** | Geolocation API + OpenStreetMap Nominatim |
 | **ストレージ** | `localStorage`（テキスト）, `IndexedDB`（画像Blob） |
@@ -164,7 +164,6 @@ particleAnimation/
 │   ├── index.html      # メインページ（合成ビュー + 入力画面）
 │   ├── style.css       # スタイル（既存デザイン統一）
 │   ├── script.js       # メインロジック
-│   ├── chroma-key.js   # クロマキー/透過処理モジュール
 │   ├── camera.js       # カメラ制御モジュール
 │   ├── frame-render.js # フレーム合成/Canvas出力モジュール
 │   ├── storage.js      # localStorage/IndexedDB管理モジュール
@@ -175,13 +174,15 @@ particleAnimation/
 
 ## 9. 実装フェーズ
 
-1. **フェーズ1**: 基盤構築（HTML/CSSレイアウト、フレーム描画、画像読み込み）
-2. **フェーズ2**: クロマキー透過実装（GB透過、色選択、パラメータ調整）
-3. **フェーズ3**: カメラ合成（getUserMedia、レイヤー重ね合わせ、ドラッグ/ピンチ/拡縮）
+1. **フェーズ1**: 基盤構築（HTML/CSSレイアウト、フレーム描画、透過PNG画像読み込み）
+2. **フェーズ2**: カメラ合成（getUserMedia、レイヤー重ね合わせ、ドラッグ/ピンチ/拡縮）
+3. **フェーズ3**: 露光・色温度調整（brightness / contrast / temperature スライダー）
 4. **フェーズ4**: テキスト入力・フレーム描画（撮影後画面、テキスト合成）
 5. **フェーズ5**: 保存/共有機能（ダウンロード、Web Share、X Intent、クリップボード）
 6. **フェーズ6**: 位置情報・ローカルストレージ（Nominatim、IndexedDBキャッシュ）
 7. **フェーズ7**: ポートフォリオ連携（トップページからのリンク追加）
+
+> **注**: 旧版にあった「クロマキー透過実装」フェーズは廃止した。入力画像はアルファ付き透過PNGに統一し、ピクセル単位の色キー処理は実施しない。
 
 ---
 
@@ -214,12 +215,16 @@ particleAnimation/
 print-photo/
 ├── tests/
 │   ├── unit/              # Vitest ユニットテスト
-│   │   ├── chroma-key.test.js
 │   │   ├── frame-render.test.js
 │   │   ├── storage.test.js
 │   │   └── location.test.js
 │   └── e2e/               # Playwright E2Eテスト
-│       └── print-photo.spec.js
+│       ├── print-photo.spec.js
+│       ├── exposure.spec.js
+│       ├── temperature.spec.js
+│       ├── text-input.spec.js
+│       ├── save-share.spec.js
+│       └── title-font.spec.js
 ├── vitest.config.js       # Vitest設定
 ├── playwright.config.js   # Playwright設定
 └── package.json           # devDependencies: vitest, jsdom, canvas, @playwright/test
@@ -227,15 +232,7 @@ print-photo/
 
 ### 10.4 ユニットテスト項目（Vitest）
 
-#### chroma-key.test.js
-| ID | テストケース | 入力 | 期待結果 |
-|---|---|---|---|
-| U-C1 | デフォルト緑透過 | RGB(0,255,0) のピクセル | アルファ値 = 0（完全透過） |
-| U-C2 | 非緑色不透過 | RGB(255,0,0) のピクセル | アルファ値 = 255（不透過） |
-| U-C3 | 閾値境界 | RGB(0,240,0) のピクセル（閾値10） | 閾値内なら透過、閾値外なら不透過 |
-| U-C4 | Feather範囲 | 境界近傍ピクセル | アルファ値が0〜255の中間値になる |
-| U-C5 | 色ピックアップ | クリック座標 → ピクセル色抽出 | 該当座標のRGB値を正しく取得 |
-| U-C6 | 白背景透過 | ピックアップ色 = 白、閾値調整後 | 白色背景が透過される |
+> 旧版の `chroma-key.test.js` セクション（U-C1〜U-C6）はクロマキー処理廃止に伴い削除した。透過PNGを直接Canvasに読み込む方式になったため、ピクセル単位の色キー計算ロジックは存在しない。
 
 #### frame-render.test.js
 | ID | テストケース | 入力 | 期待結果 |
@@ -273,20 +270,19 @@ print-photo/
 | ID | テストケース | 手順（自動） | 期待結果（自動検証） |
 |---|---|---|---|
 | E-P1 | ページ読み込み・初期表示 | `page.goto('/')` | ローディング後、`data-testid="main-view"` が表示される。スクリーンショット比較でダークテーマ確認 |
-| E-P2 | 画像ファイルアップロード | `input[type=file].setInputFiles('test-assets/green-screen.png')` | `data-testid="uploaded-preview"` に画像が表示される。スクリーンショットで緑背景が透過されていることを目視確認（ピクセル値検証も併用） |
-| E-P3 | 色ピックアップ | 画像上を `page.click()` | ピックアップ後、プレビューCanvasの該当色ピクセルのアルファ値が変化 |
-| E-P4 | スライダー操作（閾値） | `page.locator('[data-testid=threshold]').fill('80')` | Canvasプレビューが変化（スクリーンショット差分検出） |
-| E-P5 | カメラ起動モック | `page.evaluate(() => mockGetUserMedia())` → 「カメラ開始」クリック | モックVideo要素が合成エリアに表示される |
-| E-P6 | ドラッグ移動 | `page.locator('.overlay-image').dragTo({x:100, y:100})` | 要素の `transform` / `left` / `top` が更新される |
-| E-P7 | 「撮影」ボタン | `page.click('[data-testid=shutter-btn]')` | URLが `/preview` に変化（または `data-testid="preview-view"` が表示される） |
-| E-P8 | テキスト入力→プレビュー反映 | `page.fill('[data-testid=title-input]', 'Hello')` | プレビューCanvas上のピクセルにテキスト色が検出される（OCR不要：特定座標の色変化で判定） |
+| E-P2 | 透過PNG画像ファイルアップロード | `input[type=file].setInputFiles('test-assets/transparent-sample.png')` | `data-testid="uploaded-preview"` に画像が表示される。`camera-start-btn` が有効化される |
+| E-P3 | カメラ起動で合成画面に遷移 | `page.click('[data-testid=camera-start-btn]')` | 合成画面が表示され、`#frame-content` / `#overlay-canvas` / `#shutter-btn` が有効状態で表示される |
+| E-P4 | 撮影でプレビュー画面に遷移 | `page.click('[data-testid=shutter-btn]')` | プレビュー画面 `#preview-view` が表示され、`#result-canvas` に意味のあるサイズで描画される |
 | E-P9 | 日付自動入力 | `page.goto('/')` → 撮影画面へ | `data-testid=date-input` の値が `new Date().toISOString().slice(0,10)` と一致 |
-| E-P10 | ローカルストレージ復元 | テキスト入力 → リロード | 入力値が `localStorage` から復元され、input欄に表示される |
-| E-P11 | PNGダウンロード | 「保存（PNG）」クリック | `page.waitForEvent('download')` でファイル名 `PrintPhoto_*.png` を検証 |
-| E-P12 | 場所ワーニング | 場所欄に文字を入力 → 「保存」クリック | `data-testid="location-warning-modal"` が表示される |
-| E-P13 | ワーニング「場所を削除して進む」 | モーダル内の削除ボタンをクリック | 場所欄が空文字になり、ダウンロードイベントが発生 |
-| E-P14 | X Intentリンク | 「Xで投稿」をクリック | 新規タブが開き、URLに `twitter.com/intent/post?text=...%23PrintPhoto` が含まれる（`page.waitForEvent('popup')`） |
+| E-P10 | 撮影後画面右上の不可視ボタンでデバッグログコピー | `page.click('[data-testid=copy-debug-btn]')` | クリップボードに `[hash] [ts] [takePicture-...] ...` 形式のログがコピーされる。ボタンは16x16の固定ヒット領域・完全透明 |
 | E-P15 | レスポンシブ（モバイルビューポート） | `page.setViewportSize({width:375, height:812})` → リロード | レイアウトが崩れず、撮影ボタン等がタップ可能なサイズであることをスクリーンショットで検証 |
+| E-P16 | デプロイ後のURLでもデバッグログをコピーできる | `page.goto('https://ochoco-portfolio.pages.dev/print-photo/')` → 撮影 → コピー | ローカルCIでは skip。デプロイ環境でのみ実行 |
+| E-P17 | カメラ未対応時はトップ画面のままガイドを表示 | `Object.defineProperty(navigator, 'mediaDevices', { value: undefined })` | `#screen-top` のまま `#camera-permission-guide` に「カメラ機能に対応していません」表示 |
+| E-P18 | プレビューから戻るとカメラプレビューを再開する | 撮影 → `#btn-back-compose` クリック | `#screen-compose` 表示後 `camera-video.srcObject` が再設定されている |
+| E-P19 | 戻るボタンでトップ画面に戻れる | 合成画面 → `#btn-back-top` | `#screen-top` が表示される |
+| E-P20 | 撮影後フォームのラベルに Font Awesome アイコンが表示される | 撮影後 | タイトル/撮影者/日付/場所の `<label>` 内に `.form-icon` が表示される |
+| E-P21 | プレビュー画面ではフレーム内メタアイコンは非表示、入力値は保持される | 撮影後、フォーム入力300ms待機 | `#frame-photographer .fa-user` 等が `isVisible() === false`、テキストは保持 |
+| E-P22 | 日付は MM/DD/YYYY 形式で表示される | `#input-date` に `2026-06-13` 入力 | `#frame-date-location .meta-date-text` の `textContent` が `06/13/2026` |
 
 ### 10.6 エッジケース・異常系（自動テスト）
 
@@ -337,10 +333,10 @@ jobs:
 
 | フェーズ | 実装期間（想定） | 自動テスト対応 | 備考 |
 |---|---|---|---|
-| フェーズ1 | 1日 | Vitest: U-F1 〜 U-F3 / Playwright: E-P1, E-P15 | レイアウトテストはスクリーンショット比較 |
-| フェーズ2 | 1日 | Vitest: U-C1 〜 U-C6 | Canvasピクセル値のユニットテストを重点 |
-| フェーズ3 | 1.5日 | Playwright: E-P3 〜 E-P6, AE1 | getUserMediaモック必須 |
-| フェーズ4 | 1日 | Playwright: E-P7 〜 E-P10 / Vitest: U-F4 | テキスト合成のE2Eはピクセル変化で検証 |
+| フェーズ1 | 1日 | Vitest: U-F1 〜 U-F3 / Playwright: E-P1, E-P2, E-P15 | レイアウトテストはスクリーンショット比較。透過PNG読み込みのみ |
+| フェーズ2 | 1.5日 | Playwright: E-P3, E-P5, E-P6, AE1 | getUserMediaモック必須。クロマキー処理廃止によりU-C*は削除済み |
+| フェーズ3 | 1日 | Playwright: E-E* (exposure), E-T* (temperature) | brightness / contrast / temperature スライダー |
+| フェーズ4 | 1日 | Playwright: E-P7 〜 E-P10, E-TX* / Vitest: U-F4 | テキスト合成のE2Eはピクセル変化で検証 |
 | フェーズ5 | 1日 | Playwright: E-P11, E-P14, AE5 | ダウンロードイベント検証、Intent URL検証 |
 | フェーズ6 | 1.5日 | Playwright: E-P12, E-P13, AE2 〜 AE4, AE6 / Vitest: U-S1 〜 U-S6, U-L1 〜 U-L3 | ストレージはユニットテストで網羅 |
 | フェーズ7 | 0.5日 | Playwright: E-P15（レスポンシブ再確認） | リンク遷移確認 |
