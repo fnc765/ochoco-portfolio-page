@@ -447,6 +447,7 @@ function init() {
 
         inputDate.value = getTodayStr();
         restoreFormState();
+        syncFrameTextLayer();
         restoreThumbnails();
         checkEnvironment();
         restoreAdjustState();
