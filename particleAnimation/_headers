@@ -13,8 +13,7 @@
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'
 
-# PrintPhoto: JS/CSS は更新ごとに必ず再検証 (?v=N 不要)
-/print-photo/*.js
-  Cache-Control: public, max-age=0, must-revalidate
-/print-photo/*.css
+# PrintPhoto: HTML/JS/CSS は更新ごとに必ず再検証 (?v=N 不要)
+# 画像は元のパスで参照されるため同ルールに含まれるが、ETag 検証で実体再送は抑えられる
+/print-photo/*
   Cache-Control: public, max-age=0, must-revalidate
