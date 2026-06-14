@@ -369,16 +369,8 @@ function addDebugLog(label, data) {
         const entry = `[${hash}] [${ts}] [${label}] ${JSON.stringify(data, null, 2)}`;
         debugLogs.push(entry);
         console.log(entry);
-        renderDebugLog();
     } catch (e) {
         console.error(`[${hash}] [${ts}] [addDebugLog-error]`, e, { label, data });
-    }
-}
-
-function renderDebugLog() {
-    const el = document.getElementById('debug-log');
-    if (el) {
-        el.value = debugLogs.join('\n');
     }
 }
 
@@ -607,17 +599,6 @@ function switchScreen(name) {
     screens[name].classList.add('active');
     currentScreen = name;
     window.scrollTo(0, 0);
-
-    // プレビュー画面に遷移した時にデバッグログを再描画・表示
-    const debugPanel = document.getElementById('debug-panel');
-    if (debugPanel) {
-        if (name === 'preview') {
-            debugPanel.classList.add('active');
-            renderDebugLog();
-        } else {
-            debugPanel.classList.remove('active');
-        }
-    }
 }
 
 // =====================================
@@ -1568,7 +1549,6 @@ window.PrintPhoto = {
     copyDebugLogs,
     debugLogs,
     addDebugLog,
-    renderDebugLog,
     selectedImageDataUrl: () => selectedImageDataUrl,
     getProcessedCanvas: () => processedImageCanvas,
     getOriginalCanvas: () => originalImageCanvas,

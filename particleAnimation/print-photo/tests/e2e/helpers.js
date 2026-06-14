@@ -28,10 +28,12 @@ export function installApiMocks() {
 
 /**
  * テスト用 fixture: ページを開くだけでカメラ・位置情報モックが有効な状態になる。
+ * クリップボード読み書き権限も付与する。
  * 利用例: test('foo', async ({ page }) => { ... });
  */
 export const test = base.extend({
     context: async ({ context }, use) => {
+        await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:8080' });
         await context.addInitScript({ content: installApiMocks() });
         await use(context);
     },
