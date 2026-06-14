@@ -63,6 +63,7 @@ const thresholdSlider = document.getElementById('threshold-slider');
 const featherSlider = document.getElementById('feather-slider');
 const brightnessSlider = document.getElementById('brightness-slider');
 const contrastSlider = document.getElementById('contrast-slider');
+const temperatureSlider = document.getElementById('temperature-slider');
 const colorDot = document.getElementById('color-dot');
 const colorValue = document.querySelector('.color-value');
 
@@ -531,6 +532,7 @@ function bindEvents() {
     // 露光調整
     brightnessSlider.addEventListener('input', updateExposure);
     contrastSlider.addEventListener('input', updateExposure);
+    temperatureSlider.addEventListener('input', updateExposure);
 
     // 色ピックアップ
     uploadPreview.addEventListener('click', handleColorPick);
@@ -781,9 +783,14 @@ function redrawOverlayCanvas() {
 
     const brightness = parseInt(brightnessSlider.value, 10);
     const contrast = parseInt(contrastSlider.value, 10);
+    const temperature = parseInt(temperatureSlider.value, 10);
 
-    if (brightness !== 100 || contrast !== 100) {
-        ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+    if (brightness !== 100 || contrast !== 100 || temperature !== 0) {
+        const filterParts = [];
+        if (brightness !== 100) filterParts.push(`brightness(${brightness}%)`);
+        if (contrast !== 100) filterParts.push(`contrast(${contrast}%)`);
+        if (temperature !== 0) filterParts.push(`hue-rotate(${temperature * 0.9}deg)`);
+        ctx.filter = filterParts.join(' ');
     }
 
     // プレビュー画像を合成エリアにフィットするように左上に描画
@@ -1069,6 +1076,7 @@ async function takePicture() {
                 brightness: parseInt(brightnessSlider.value, 10),
                 contrast: parseInt(contrastSlider.value, 10),
                 saturation: 100,
+                temperature: parseInt(temperatureSlider.value, 10),
             });
         } catch (renderErr) {
             addDebugLog('renderFrame-error', { message: renderErr.message, stack: renderErr.stack });

@@ -111,4 +111,218 @@ describe('frame-render', () => {
         expect(centerPixel[1]).toBe(255); // G
         expect(centerPixel[2]).toBe(0);   // B
     });
+
+    // ============================================
+    // 色温度（temperature）調整のテスト
+    // renderFrame は ctx.filter を介して hue-rotate を適用する。
+    // モックではピクセル変換はスキップされるため、ctx.filter の組み立て結果を検証する。
+    // 背景 drawImage に先駆けて捕捉されないよう、overlay drawImage のみを識別する。
+    // ============================================
+    describe('色温度 (temperature)', () => {
+        function makeRenderFrameWithFilterCapture(opts) {
+            const captured = { filterDuringOverlayDraw: null, filterDuringBgDraw: null };
+            const bg = opts.background;
+            const overlay = opts.overlay;
+
+            const originalCreate = document.createElement.bind(document);
+            document.createElement = (tag) => {
+                const el = originalCreate(tag);
+                if (tag === 'canvas') {
+                    const origGet = el.getContext.bind(el);
+                    el.getContext = (type) => {
+                        const ctx = origGet(type);
+                        if (type === '2d') {
+                            const origDI = ctx.drawImage.bind(ctx);
+                            ctx.drawImage = function (...args) {
+                                const first = args[0];
+                                if (first === overlay && captured.filterDuringOverlayDraw === null) {
+                                    captured.filterDuringOverlayDraw = this.filter;
+                                } else if (first === bg && captured.filterDuringBgDraw === null) {
+                                    captured.filterDuringBgDraw = this.filter;
+                                }
+                                return origDI(...args);
+                            };
+                        }
+                        return ctx;
+                    };
+                }
+                return el;
+            };
+
+            try {
+                const result = renderFrame(opts);
+                return { result, captured };
+            } finally {
+                document.createElement = originalCreate;
+            }
+        }
+
+        it('U-T1: temperature=0 で overlay draw 時に filter=none', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { result, captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                temperature: 0,
+            });
+
+            expect(result.width).toBeGreaterThan(0);
+            expect(captured.filterDuringOverlayDraw).toBe('none');
+        });
+
+        it('U-T2: temperature=100 で hue-rotate(90deg) が含まれる', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                temperature: 100,
+            });
+
+            expect(captured.filterDuringOverlayDraw).toContain('hue-rotate(90deg)');
+        });
+
+        it('U-T3: temperature=-100 で hue-rotate(-90deg) が含まれる', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                temperature: -100,
+            });
+
+            expect(captured.filterDuringOverlayDraw).toContain('hue-rotate(-90deg)');
+        });
+
+        it('U-T4: temperature=50 で hue-rotate(45deg) 相当', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                temperature: 50,
+            });
+
+            expect(captured.filterDuringOverlayDraw).toContain('hue-rotate(45deg)');
+        });
+
+        it('U-T5: brightness/contrast/saturation/temperature すべて100/0 デフォルトで filter=none', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                brightness: 100,
+                contrast: 100,
+                saturation: 100,
+                temperature: 0,
+            });
+
+            expect(captured.filterDuringOverlayDraw).toBe('none');
+        });
+
+        it('U-T6: temperature=0 + brightness=120 で brightness のみ含まれ hue-rotate は含まれない', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                brightness: 120,
+                temperature: 0,
+            });
+
+            expect(captured.filterDuringOverlayDraw).toContain('brightness(120%)');
+            expect(captured.filterDuringOverlayDraw).not.toContain('hue-rotate');
+        });
+
+        it('U-T7: temperature + brightness 同時指定で両方の filter を含む', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+            const overlay = document.createElement('canvas');
+            overlay.width = 50;
+            overlay.height = 50;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlay,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                brightness: 110,
+                contrast: 90,
+                temperature: 25,
+            });
+
+            expect(captured.filterDuringOverlayDraw).toContain('brightness(110%)');
+            expect(captured.filterDuringOverlayDraw).toContain('contrast(90%)');
+            // 25 * 0.9 = 22.5
+            expect(captured.filterDuringOverlayDraw).toContain('hue-rotate(22.5deg)');
+        });
+
+        it('U-T8: overlay なし（temperature 指定のみ）では hue-rotate は適用されない', () => {
+            const bg = document.createElement('canvas');
+            bg.width = 100;
+            bg.height = 100;
+
+            const { captured } = makeRenderFrameWithFilterCapture({
+                background: bg,
+                overlayTransform: { x: 0, y: 0, scale: 1 },
+                overlayCssWidth: 100,
+                overlayCssHeight: 100,
+                temperature: 100,
+            });
+
+            // overlay なしのときは hue-rotate 適用ロジックを通らない
+            expect(captured.filterDuringOverlayDraw).toBe(null);
+        });
+    });
 });

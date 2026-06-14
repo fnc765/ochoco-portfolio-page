@@ -123,6 +123,7 @@ export function drawImageCover(ctx, img, dx, dy, dw, dh, displayW, displayH) {
  * @param {number} [opts.brightness] - 明るさ（50-150）
  * @param {number} [opts.contrast] - コントラスト（50-150）
  * @param {number} [opts.saturation] - 彩度（50-150）
+ * @param {number} [opts.temperature] - 色温度（-100〜+100、+で暖色/-で寒色）
  * @param {number} [opts.outputWidth] - 出力幅（デフォルト2048）
  * @param {number} [opts.outputHeight] - 出力高さ（デフォルト1440）
  * @returns {HTMLCanvasElement}
@@ -188,8 +189,14 @@ export function renderFrame(opts) {
         const b = opts.brightness ?? 100;
         const c = opts.contrast ?? 100;
         const s = opts.saturation ?? 100;
-        if (b !== 100 || c !== 100 || s !== 100) {
-            ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+        const t = opts.temperature ?? 0;
+        if (b !== 100 || c !== 100 || s !== 100 || t !== 0) {
+            const filterParts = [];
+            if (b !== 100) filterParts.push(`brightness(${b}%)`);
+            if (c !== 100) filterParts.push(`contrast(${c}%)`);
+            if (s !== 100) filterParts.push(`saturate(${s}%)`);
+            if (t !== 0) filterParts.push(`hue-rotate(${t * 0.9}deg)`);
+            ctx.filter = filterParts.join(' ');
         }
 
         ctx.drawImage(opts.overlay, 0, 0);
