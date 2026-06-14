@@ -244,9 +244,12 @@ html, body {
 
 /* ===================================
    フレーム構成
+   - 白枠は描画しない (撮影後の resultCanvas に含まれる)
+   - 撮影前: 全面に video + overlay-canvas + placeholder
+   - 撮影後: 全面に resultCanvas (白枠込み)
    =================================== */
 .photo-frame {
-    background: #fff;
+    background: #000;
     border-radius: 0.25rem;
     position: relative;
     width: 100%;
@@ -257,18 +260,9 @@ html, body {
     overflow: hidden;
 }
 
-.frame-content {
-    position: absolute;
-    top: 4.79%;
-    left: 3.125%;
-    width: 93.75%;
-    height: 75%;
-    background: #000;
-    overflow: hidden;
-    border-radius: 0.125rem;
-}
-
 .camera-video {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -277,8 +271,7 @@ html, body {
 
 .overlay-canvas {
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
     pointer-events: auto;
@@ -326,17 +319,12 @@ html, body {
     width: 100%;
     height: 100%;
     display: none;
-    background: #fff;
     z-index: 2;
 }
 
 #photo-frame.pp-captured .camera-video,
 #photo-frame.pp-captured .overlay-canvas {
     display: none;
-}
-
-#photo-frame.pp-captured .frame-content {
-    visibility: hidden;
 }
 
 #photo-frame.pp-captured #result-canvas {
