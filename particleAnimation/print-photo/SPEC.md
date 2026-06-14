@@ -150,10 +150,22 @@ CAPTURED ─(再撮影)─▶ 内部キャンバス破棄 → STARTING ▶ LIVE
 
 | 名前 | サイズ | 用途 |
 |---|---|---|
-| `internalResultCanvas` | 2048x1440 | 保存・共有の最終出力 |
+| `<canvas#video-snapshot>` | 1920x1080 (video 解像度) | **撮影時点の video 最終フレームを保持**。画面プレビューは `#photo-frame.pp-captured` 時にこの canvas を表示し、stopCameraInternal(true) で video 要素が再作成されても映像が消えないようにする |
+| `internalResultCanvas` | 2048x1440 | 保存・共有の最終出力。`renderFrame` の背景に `videoSnapshot` を使う |
 | `internalResultThumbnailCanvas` | 512x361 (64:45) | スライダー操作中の即時プレビュー用。画面表示はしない |
 
 `pendingFullRender` フラグで、最終 2048x1440 の再生成を `requestAnimationFrame` でバッチし、スライダー連続操作時の負荷を抑える。保存/共有/change/click で `pendingFullRender` が残っていれば同期的に最終版を確定してから出力する。
+
+### 撮影フロー
+
+1. ユーザーがシャッターボタン (LIVE 状態で「撮影」) を押す
+2. `videoElement.pause()` で現在のフレームを固定
+3. `videoSnapshot` canvas に video 要素の現在フレームを `drawImage` でコピー (1920x1080)
+4. `renderFrame` に `videoSnapshot` を背景として渡し、`internalResultCanvas` (2048x1440) を生成
+5. `stopCameraInternal(true)` でカメラを完全停止 (video 要素は再作成される)
+6. `setShutterState('CAPTURED')` でボタンラベルを「再撮影」に、共有/保存ボタンを有効化、CSS で `video-snapshot` を表示
+
+撮影後のスライダー操作では `videoSnapshot` (確定フレーム) を背景に使い続けるため、映像は消えない。
 
 ---
 

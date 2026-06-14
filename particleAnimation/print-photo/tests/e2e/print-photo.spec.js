@@ -89,6 +89,73 @@ test('E-U7: 撮影後に「再撮影」を押すとカメラが再起動し LIVE
     expect(internal).toBe(false);
 });
 
+test('E-U7b: 撮影後の画面プレビューが真っ黒にならない（モックカメラ映像が残る）', async ({ page }) => {
+    // 撮影時に video の最終フレームを videoSnapshot にコピーし、
+    // stopCameraInternal(true) で video 要素が再作成されても
+    // プレビューには videoSnapshot のフレームが残ることを検証する。
+    await selectAndCapture(page);
+
+    // videoSnapshot が存在し、絵エリア全体が単色 (緑) で塗られている
+    const snapInfo = await page.evaluate(() => {
+        const s = window.PrintPhoto.getState();
+        const snap = s.getVideoSnapshot();
+        if (!snap || snap.width === 0) return null;
+        const ctx = snap.getContext('2d');
+        const samples = [];
+        for (let i = 0; i < 5; i++) {
+            for (let j = 0; j < 3; j++) {
+                const x = Math.floor(64 + 200 + (i * 400));
+                const y = Math.floor(69 + 200 + (j * 250));
+                const p = ctx.getImageData(x, y, 1, 1).data;
+                samples.push([p[0], p[1], p[2], p[3]]);
+            }
+            }
+        return {
+            w: snap.width, h: snap.height,
+            samples,
+        };
+    });
+    expect(snapInfo).not.toBeNull();
+    expect(snapInfo.w).toBeGreaterThan(0);
+    expect(snapInfo.h).toBeGreaterThan(0);
+    // すべてのサンプルが (0,0,0,0) や (0,0,0,255) ではないこと (映像が残っている)
+    const isAllBlack = snapInfo.samples.every(([r, g, b, a]) => r === 0 && g === 0 && b === 0);
+    expect(isAllBlack).toBe(false);
+    // 少なくとも1サンプルが緑 (58, 138, 58) を示す
+    const hasGreen = snapInfo.samples.some(([r, g, b]) => r === 58 && g === 138 && b === 58);
+    expect(hasGreen).toBe(true);
+});
+
+test('E-U7c: 撮影後の内部キャンバス (保存用) が真っ黒ではなくカメラ映像を含む', async ({ page }) => {
+    await selectAndCapture(page);
+
+    const info = await page.evaluate(() => {
+        const s = window.PrintPhoto.getState();
+        const c = s.getInternalResultCanvas();
+        if (!c) return null;
+        const ctx = c.getContext('2d');
+        const samples = [];
+        for (let i = 0; i < 5; i++) {
+            for (let j = 0; j < 3; j++) {
+                const x = Math.floor(64 + 200 + (i * 400));
+                const y = Math.floor(69 + 200 + (j * 250));
+                const p = ctx.getImageData(x, y, 1, 1).data;
+                samples.push([p[0], p[1], p[2], p[3]]);
+            }
+        }
+        return { w: c.width, h: c.height, samples };
+    });
+    expect(info).not.toBeNull();
+    expect(info.w).toBe(2048);
+    expect(info.h).toBe(1440);
+    // 絵エリアにモックカメラの緑 (58, 138, 58) が含まれている
+    const hasGreen = info.samples.some(([r, g, b]) => r === 58 && g === 138 && b === 58);
+    expect(hasGreen).toBe(true);
+    // 絵エリア全体 (サンプル領域) が真っ黒ではない
+    const isAllBlack = info.samples.every(([r, g, b]) => r === 0 && g === 0 && b === 0);
+    expect(isAllBlack).toBe(false);
+});
+
 test('E-U8: 日付が今日の値で自動入力される', async ({ page }) => {
     await openApp(page);
     const browserToday = await page.evaluate(() => {

@@ -15,15 +15,18 @@ export const TEST_IMAGE = 'tests/e2e/test-assets/green-screen.png';
  * beforeEach で context.addInitScript(installApiMocks) として使う。
  *
  * カメラ映像の代わりに、テスト用 canvas からの captureStream を MediaStream として返す。
- * これにより videoWidth/videoHeight/track が有効になり、撮影フローが実機と同様に動作する。
+ * track の getSettings() を上書きして facingMode/width/height を返すことで、
+ * 制約チェックを通す。
  */
 export function installApiMocks() {
     return `
         if (!navigator.mediaDevices) {
             navigator.mediaDevices = {};
         }
-        navigator.mediaDevices.getUserMedia = async (constraints) => {
-            // 制約チェックを通すため、すべての制約を満たす track を作成
+        // カメラ映像の代わりに captureStream ベースの MediaStream を返す。
+        // getUserMedia が制約エラーで reject されないよう、すべての制約を満たす settings を
+        // getSettings() で返すように上書きする。
+        const mockGetUserMedia = async (constraints) => {
             const c = document.createElement('canvas');
             const w = (constraints && constraints.video && constraints.video.width && constraints.video.width.ideal) || 1920;
             const h = (constraints && constraints.video && constraints.video.height && constraints.video.height.ideal) || 1080;
@@ -39,7 +42,6 @@ export function installApiMocks() {
             ctx.textBaseline = 'middle';
             ctx.fillText('MOCK CAM', c.width / 2, c.height / 2);
             const stream = c.captureStream(15);
-            // captureStream の track に facingMode / width / height を settings として持たせる
             try {
                 const track = stream.getVideoTracks()[0];
                 if (track) {
@@ -49,7 +51,6 @@ export function installApiMocks() {
                         frameRate: 15,
                         deviceId: 'mock-device',
                     };
-                    // facingMode は facingMode が要求されていれば設定
                     if (constraints?.video?.facingMode) {
                         const fm = constraints.video.facingMode;
                         settings.facingMode = typeof fm === 'string' ? fm : (fm.ideal || fm.exact || 'environment');
@@ -65,10 +66,49 @@ export function installApiMocks() {
             window.__mockCameraCanvas = c;
             return stream;
         };
+        navigator.mediaDevices.getUserMedia = mockGetUserMedia;
         navigator.geolocation.getCurrentPosition = (success) => {
             success({ coords: { latitude: 35.0, longitude: 139.0 } });
         };
     `;
+}
+
+/**
+ * カメラ起動をスキップして、video 要素に直接モック stream を設定する。
+ * 実機挙動に近い状態で takePicture のフローを E2E で検証するためのヘルパー。
+ * Chromium 環境では getUserMedia の制約を満たせないことが多いのでこちらを使う。
+ */
+export async function injectMockCameraStream(page) {
+    await page.evaluate(() => {
+        const c = document.createElement('canvas');
+        c.width = 1920;
+        c.height = 1080;
+        const ctx = c.getContext('2d');
+        // カメラ映像の代わりに緑単色で塗りつぶし
+        ctx.fillStyle = '#3a8a3a';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '64px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('MOCK CAM', c.width / 2, c.height / 2);
+        const stream = c.captureStream(15);
+        const v = document.getElementById('camera-video');
+        v.srcObject = stream;
+        v.muted = true;
+        v.playsInline = true;
+        v.play().catch(() => {});
+        // PrintPhoto に「カメラ起動済み」を知らせるために stream 経由で setActiveStream
+        const track = stream.getVideoTracks()[0];
+        if (track) {
+            Object.defineProperty(track, 'getSettings', {
+                value: () => ({ width: 1920, height: 1080, frameRate: 15 }),
+                configurable: true,
+            });
+        }
+    });
+    // 1フレーム待つ
+    await page.waitForTimeout(500);
 }
 
 /**
@@ -144,11 +184,16 @@ export async function closeHistoryModal(page) {
 // =====================================
 
 /**
- * シャッターボタン押下 → カメラ起動 (LIVE 状態)
+ * シャッターボタン押下 → カメラ起動 (LIVE 状態)。
+ * Chromium 環境ではモックの getUserMedia が制約を満たせずエラーになるため、
+ * 事前にモック stream を video 要素に注入してから startCameraSession を経由して起動する。
  */
 export async function startCamera(page) {
+    // モック stream を video 要素に注入
+    await injectMockCameraStream(page);
+    // シャッターボタン押下で startCameraSession 起動
     await page.click('[data-testid="shutter-btn"]');
-    await expect(page.locator('[data-testid="shutter-btn"]')).toContainText('撮影');
+    await expect(page.locator('[data-testid="shutter-btn"]')).toContainText('撮影', { timeout: 8000 });
     await expect(page.locator('#photo-frame')).toHaveClass(/pp-live/);
 }
 

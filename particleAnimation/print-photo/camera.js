@@ -39,10 +39,23 @@ export async function startCamera(videoElement) {
         activeStream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
         if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
-            activeStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-                audio: false,
-            });
+            // 1回目: facingMode を外してリトライ
+            try {
+                activeStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false,
+                });
+            } catch (err2) {
+                // 2回目: video 制約なしでリトライ (環境カメラ制約を満たす track がない場合)
+                if (err2.name === 'OverconstrainedError' || err2.name === 'NotFoundError') {
+                    activeStream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false,
+                    });
+                } else {
+                    throw err2;
+                }
+            }
         } else {
             throw err;
         }

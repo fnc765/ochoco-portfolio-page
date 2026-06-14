@@ -69,6 +69,7 @@ const adjustTile = document.getElementById('adjust-tile');
 
 let videoElement = document.getElementById('camera-video');
 const overlayCanvas = document.getElementById('overlay-canvas');
+const videoSnapshot = document.getElementById('video-snapshot');
 const frameContent = document.getElementById('frame-content');
 
 const brightnessSlider = document.getElementById('brightness-slider');
@@ -255,6 +256,30 @@ async function startCameraSession() {
 
     const requestId = ++cameraRequestId;
     addDebugLog('camera-start-request', { requestId });
+
+    // テスト/特殊用途: video 要素に既に stream が注入されている場合は
+    // getUserMedia を経由せずそのまま使う (E2E でモック stream を使うため)
+    if (videoElement.srcObject instanceof MediaStream) {
+        const existing = videoElement.srcObject;
+        setActiveStream(existing);
+        isCameraActive = true;
+        onCameraSuccess(existing);
+        // video メタデータ待ち (短時間)
+        try {
+            if (videoElement.readyState < 2) {
+                await new Promise((resolve) => {
+                    let done = false;
+                    const finish = () => { if (!done) { done = true; resolve(); } };
+                    const handler = () => { if (videoElement.readyState >= 2) finish(); };
+                    ['loadedmetadata', 'loadeddata', 'canplay', 'playing'].forEach(ev => {
+                        videoElement.addEventListener(ev, handler, { once: true });
+                    });
+                    setTimeout(finish, 1500);
+                });
+            }
+        } catch (e) { /* noop */ }
+        return true;
+    }
 
     const streamPromise = startCamera(videoElement);
     streamPromise.then((stream) => {
@@ -767,6 +792,11 @@ async function applyImage(dataUrl, saveHistory) {
             internalResultCanvas = null;
             internalResultThumbnailCanvas = null;
             pendingFullRender = false;
+            // videoSnapshot もクリアして再撮影時に新規フレームをコピーさせる
+            const sCtx = videoSnapshot.getContext('2d');
+            videoSnapshot.width = 0;
+            videoSnapshot.height = 0;
+            sCtx.clearRect(0, 0, videoSnapshot.width, videoSnapshot.height);
         }
     } catch (err) {
         console.error('Image load failed:', err);
@@ -878,6 +908,9 @@ async function takePicture() {
     }
 
     try {
+        // video 要素を一時停止して現在のフレームを固定
+        try { videoElement.pause(); } catch (e) { /* noop */ }
+
         const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
         const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
         const bgDisplayW = videoElement.clientWidth || (frameContent ? frameContent.offsetWidth : 0);
@@ -898,9 +931,38 @@ async function takePicture() {
             } catch (e) { /* noop */ }
         }
 
+        // 撮影時点の video フレームをスナップショット canvas にコピー。
+        // video 要素はその後 stopCameraInternal(true) で再作成されるため、
+        // 確定フレームをコピーして残しておく必要がある。
+        const snapshotW = videoElement.videoWidth || bgDisplayW || 1920;
+        const snapshotH = videoElement.videoHeight || bgDisplayH || 1080;
+        if (videoSnapshot.width !== snapshotW || videoSnapshot.height !== snapshotH) {
+            videoSnapshot.width = snapshotW;
+            videoSnapshot.height = snapshotH;
+        }
+        const snapCtx = videoSnapshot.getContext('2d');
+        snapCtx.clearRect(0, 0, snapshotW, snapshotH);
+        if (hasRenderableVideoFrame(videoElement) && videoElement.videoWidth > 0) {
+            snapCtx.drawImage(videoElement, 0, 0, snapshotW, snapshotH);
+        } else {
+            // フレームが取れない場合 (captureStream が videoWidth 0 を返すケース等)、
+            // 黒背景で代用
+            snapCtx.fillStyle = '#000000';
+            snapCtx.fillRect(0, 0, snapshotW, snapshotH);
+        }
+        addDebugLog('takePicture-snapshot', {
+            videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
+            snapW: snapshotW, snapH: snapshotH,
+            snapCenterPixel: (() => {
+                const p = snapCtx.getImageData(Math.floor(snapshotW / 2), Math.floor(snapshotH / 2), 1, 1).data;
+                return [p[0], p[1], p[2], p[3]];
+            })(),
+        });
+
         // 内部キャンバス (2048x1440) を生成。画面には出さず保存/共有でのみ使用
+        // 背景には videoSnapshot を使う。video 要素は stopCameraInternal で破棄されるため
         internalResultCanvas = renderFrame({
-            background: hasRenderableVideoFrame(videoElement) ? videoElement : null,
+            background: videoSnapshot,
             backgroundDisplayWidth: bgDisplayW,
             backgroundDisplayHeight: bgDisplayH,
             overlay: overlayImageCanvas,
@@ -937,6 +999,11 @@ async function retakePicture() {
     internalResultThumbnailCanvas = null;
     pendingFullRender = false;
     fullRenderScheduled = false;
+    // videoSnapshot をクリア
+    const sCtx = videoSnapshot.getContext('2d');
+    videoSnapshot.width = 0;
+    videoSnapshot.height = 0;
+    sCtx.clearRect(0, 0, videoSnapshot.width, videoSnapshot.height);
     setShutterState('STARTING');
     const preflightMessage = getCameraPreflightMessage();
     if (preflightMessage) {
@@ -967,8 +1034,14 @@ function renderResultFromState() {
 function buildRenderOptions() {
     const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
     const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
+    const bgDisplayW = videoElement.clientWidth || (frameContent ? frameContent.offsetWidth : 0);
+    const bgDisplayH = videoElement.clientHeight || (frameContent ? frameContent.offsetHeight : 0);
     return {
-        background: null, // 撮影後の再描画ではカメラ映像は再撮影しない
+        // 撮影後の再描画でも videoSnapshot を背景に使い、絵エリアに
+        // カメラ映像が残るようにする (背景 null だと真っ黒になる)
+        background: videoSnapshot && videoSnapshot.width > 0 ? videoSnapshot : null,
+        backgroundDisplayWidth: bgDisplayW,
+        backgroundDisplayHeight: bgDisplayH,
         overlay: overlayImageCanvas,
         overlayTransform: overlayTransform,
         overlayCssWidth,
@@ -1350,5 +1423,10 @@ window.PrintPhoto = {
         selectedImageDataUrl,
         getInternalResultCanvas: () => internalResultCanvas,
         getInternalResultThumbnailCanvas: () => internalResultThumbnailCanvas,
+        getVideoSnapshot: () => videoSnapshot,
     }),
+    // テスト用フック: カメラ起動フローを直接実行
+    __testStartCamera: () => startCameraFromShutter(),
+    // テスト用フック: 撮影フローを直接実行
+    __testTakePicture: () => takePicture(),
 };

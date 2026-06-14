@@ -320,8 +320,22 @@ html, body {
     display: none;
 }
 
+.video-snapshot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+    z-index: 0;
+}
+
 #photo-frame.pp-captured .camera-video {
     display: none;
+}
+
+#photo-frame.pp-captured .video-snapshot {
+    display: block;
 }
 
 #photo-frame.pp-captured .pp-placeholder {
