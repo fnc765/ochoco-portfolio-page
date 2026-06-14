@@ -1153,7 +1153,7 @@ function updatePreviewFrame() {
     ctx.fillRect(0, textAreaTop, W, H - textAreaTop);
 
     // テキスト再描画
-    const fontFamily = "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif";
+    const fontFamily = "'Noto Sans', 'Noto Sans JP', sans-serif";
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'bottom';
     const marginX = Math.round(48 * scale);
@@ -1161,17 +1161,23 @@ function updatePreviewFrame() {
     const bottomY = H - marginBottom;
     const centerX = W / 2;
 
-    // タイトル
+    // タイトル（font-style: oblique 18deg）
     if (inputTitle.value) {
         const maxW = W - marginX * 2;
         let size = Math.round(72 * scale);
-        ctx.font = `700 ${size}px ${fontFamily}`;
+        ctx.font = `400 ${size}px ${fontFamily}`;
         while (ctx.measureText(inputTitle.value).width > maxW && size > 10) {
             size -= 2;
-            ctx.font = `700 ${size}px ${fontFamily}`;
+            ctx.font = `400 ${size}px ${fontFamily}`;
         }
+        const titleX = centerX;
+        const titleY = bottomY - Math.round(50 * scale);
+        ctx.save();
+        ctx.translate(titleX, titleY);
+        ctx.transform(1, 0, -Math.tan(18 * Math.PI / 180), 1, 0, 0);
         ctx.textAlign = 'center';
-        ctx.fillText(inputTitle.value, centerX, bottomY - Math.round(50 * scale));
+        ctx.fillText(inputTitle.value, 0, 0);
+        ctx.restore();
     }
 
     // コメント

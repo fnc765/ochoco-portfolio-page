@@ -225,7 +225,7 @@ function formatDateMMDDYYYY(value) {
 export { formatDateMMDDYYYY };
 
 function drawFrameText(ctx, opts, scale, W, H) {
-    const fontFamily = "'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif";
+    const fontFamily = "'Noto Sans', 'Noto Sans JP', sans-serif";
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'bottom';
 
@@ -235,13 +235,19 @@ function drawFrameText(ctx, opts, scale, W, H) {
     const centerX = W / 2;
     const bottomY = H - marginBottom;
 
-    // タイトル（下部中央）
+    // タイトル（下部中央、font-style: oblique 18deg）
     if (opts.title) {
         const maxTitleW = W - marginX * 2;
-        const titleSize = fitFontSize(ctx, opts.title, maxTitleW, Math.round(72 * scale), fontFamily);
-        ctx.font = `700 ${titleSize}px ${fontFamily}`;
+        const titleSize = fitTitleFontSize(ctx, opts.title, maxTitleW, Math.round(72 * scale), fontFamily);
+        ctx.font = `400 ${titleSize}px ${fontFamily}`;
+        const titleX = centerX;
+        const titleY = bottomY - Math.round(50 * scale);
+        ctx.save();
+        ctx.translate(titleX, titleY);
+        ctx.transform(1, 0, -Math.tan(18 * Math.PI / 180), 1, 0, 0);
         ctx.textAlign = 'center';
-        ctx.fillText(opts.title, centerX, bottomY - Math.round(50 * scale));
+        ctx.fillText(opts.title, 0, 0);
+        ctx.restore();
     }
 
     // 撮影者（左下：ラベル → アイコン → 名前）
@@ -306,6 +312,16 @@ function fitFontSize(ctx, text, maxWidth, maxSize, fontFamily) {
     while (ctx.measureText(text).width > maxWidth && size > 10) {
         size -= 2;
         ctx.font = `700 ${size}px ${fontFamily}`;
+    }
+    return size;
+}
+
+function fitTitleFontSize(ctx, text, maxWidth, maxSize, fontFamily) {
+    let size = maxSize;
+    ctx.font = `400 ${size}px ${fontFamily}`;
+    while (ctx.measureText(text).width > maxWidth && size > 10) {
+        size -= 2;
+        ctx.font = `400 ${size}px ${fontFamily}`;
     }
     return size;
 }

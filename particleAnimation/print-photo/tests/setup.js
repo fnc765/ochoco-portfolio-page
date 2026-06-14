@@ -11,11 +11,15 @@ class MockCanvasRenderingContext2D {
             width: width,
             height: height,
         };
+        this._stack = [];
+        this._transforms = [];
+        this._fontHistory = [];
         this.fillStyle = '#000';
         this.font = '10px sans-serif';
         this.textAlign = 'start';
         this.textBaseline = 'alphabetic';
         this.filter = 'none';
+        this._installPropertyTrackers();
     }
 
     fillRect(x, y, w, h) {
@@ -103,10 +107,37 @@ class MockCanvasRenderingContext2D {
         }
     }
 
-    save() {}
-    restore() {}
+    save() { this._stack.push(this._state()); }
+    restore() { const s = this._stack.pop(); if (s) Object.assign(this, s); }
     translate(x, y) {}
     scale(x, y) {}
+    transform(a, b, c, d, e, f) { this._transforms.push({ a, b, c, d, e, f }); }
+    setTransform(a, b, c, d, e, f) { this._transforms.push({ a, b, c, d, e, f, set: true }); }
+    _state() {
+        return {
+            fillStyle: this.fillStyle,
+            font: this.font,
+            textAlign: this.textAlign,
+            textBaseline: this.textBaseline,
+            filter: this.filter,
+        };
+    }
+
+    _installPropertyTrackers() {
+        const tracked = ['fillStyle', 'font', 'textAlign', 'textBaseline', 'filter'];
+        for (const key of tracked) {
+            let value = this[key];
+            Object.defineProperty(this, key, {
+                configurable: true,
+                enumerable: true,
+                get() { return value; },
+                set(v) {
+                    value = v;
+                    if (key === 'font') this._fontHistory.push(v);
+                },
+            });
+        }
+    }
     beginPath() {}
     rect(x, y, w, h) {}
     clip() {}

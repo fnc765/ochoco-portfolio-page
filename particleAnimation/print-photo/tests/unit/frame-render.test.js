@@ -340,3 +340,67 @@ describe('formatDateMMDDYYYY', () => {
         expect(formatDateMMDDYYYY('06/13/2026')).toBe('06/13/2026');
     });
 });
+
+describe('タイトルフォント (Noto Sans / oblique 18deg)', () => {
+    function captureTitleRender(title) {
+        const bg = document.createElement('canvas');
+        bg.width = 1920;
+        bg.height = 1080;
+
+        const result = renderFrame({
+            background: bg,
+            title,
+            outputWidth: 2048,
+            outputHeight: 1440,
+        });
+
+        const ctx = result.getContext('2d');
+        return { result, ctx };
+    }
+
+    it('U-F-N1: タイトル描画で ctx.font に Noto Sans / Noto Sans JP を含む', () => {
+        const { ctx } = captureTitleRender('Test');
+
+        const fonts = ctx._fontHistory || [];
+        const notoFonts = fonts.filter(f => /Noto Sans/.test(f) && /Noto Sans JP/.test(f));
+        expect(notoFonts.length).toBeGreaterThan(0);
+    });
+
+    it('U-F-N2: タイトル描画で weight 400 (細字) が使用される', () => {
+        const { ctx } = captureTitleRender('Test');
+
+        const fonts = ctx._fontHistory || [];
+        const notoFonts = fonts.filter(f => /Noto Sans/.test(f));
+        const has400 = notoFonts.some(f => /^400 \d+px/.test(f));
+        const hasNo700 = !notoFonts.some(f => /^700 \d+px/.test(f));
+        expect(has400).toBe(true);
+        expect(hasNo700).toBe(true);
+    });
+
+    it('U-F-N3: タイトル描画で ctx.save / transform(skewX) / restore が呼ばれる', () => {
+        const { ctx } = captureTitleRender('plamちゃん！');
+
+        expect(ctx._transforms.length).toBeGreaterThan(0);
+        const t = ctx._transforms[0];
+        const expectedSkewX = -Math.tan(18 * Math.PI / 180);
+        expect(t.a).toBe(1);
+        expect(t.d).toBe(1);
+        expect(t.c).toBeCloseTo(expectedSkewX, 6);
+        expect(t.b).toBe(0);
+    });
+
+    it('U-F-N4: タイトル省略時は transform が呼ばれない', () => {
+        const bg = document.createElement('canvas');
+        bg.width = 1920;
+        bg.height = 1080;
+
+        const result = renderFrame({
+            background: bg,
+            outputWidth: 2048,
+            outputHeight: 1440,
+        });
+
+        const ctx = result.getContext('2d');
+        expect(ctx._transforms.length).toBe(0);
+    });
+});
