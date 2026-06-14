@@ -763,6 +763,12 @@ function onCameraError(err) {
 // 露光調整（入力画像に適用）
 // =====================================
 function updateExposure() {
+    addDebugLog('updateExposure', {
+        brightness: brightnessSlider.value,
+        contrast: contrastSlider.value,
+        temperature: temperatureSlider.value,
+        hasCurrentPreviewCanvas: !!currentPreviewCanvas,
+    });
     redrawOverlayCanvas();
 }
 
