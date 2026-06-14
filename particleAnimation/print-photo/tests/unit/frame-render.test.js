@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { renderFrame, drawImageCover } from '../../frame-render.js';
+import { renderFrame, drawImageCover, formatDateMMDDYYYY } from '../../frame-render.js';
 
 describe('frame-render', () => {
     it('U-F1: フレーム座標計算（出力サイズ2048x1440）', () => {
@@ -324,5 +324,19 @@ describe('frame-render', () => {
             // overlay なしのときは hue-rotate 適用ロジックを通らない
             expect(captured.filterDuringOverlayDraw).toBe(null);
         });
+    });
+});
+
+describe('formatDateMMDDYYYY', () => {
+    it('U-FD1: YYYY-MM-DD を MM/DD/YYYY に変換', () => {
+        expect(formatDateMMDDYYYY('2026-06-13')).toBe('06/13/2026');
+    });
+
+    it('U-FD2: 空文字はそのまま空文字を返す', () => {
+        expect(formatDateMMDDYYYY('')).toBe('');
+    });
+
+    it('U-FD3: 既にMM/DD/YYYY形式の場合はそのまま返す', () => {
+        expect(formatDateMMDDYYYY('06/13/2026')).toBe('06/13/2026');
     });
 });

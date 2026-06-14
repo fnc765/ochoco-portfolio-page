@@ -89,6 +89,13 @@ const FA_ICON_LOCATION = '\uF3C5';
 const FA_FONT = '"Font Awesome 6 Free"';
 const FA_FONT_WEIGHT = '900';
 
+function formatDateMMDDYYYY(value) {
+    if (!value) return '';
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return value;
+    return `${m[2]}/${m[3]}/${m[1]}`;
+}
+
 let currentScreen = 'top';
 let selectedImageFile = null;
 let selectedImageDataUrl = null;
@@ -1168,19 +1175,25 @@ function updatePreviewFrame() {
     }
 
     // コメント
-    // 撮影者（アイコン + ラベル + 名前）
+    // 撮影者（ラベル → アイコン → 名前）
     if (inputPhotographer.value) {
         const metaSize = Math.round(28 * scale);
+        const gap = Math.round(6 * scale);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
         let x = marginX;
+        ctx.font = `400 ${metaSize}px ${fontFamily}`;
+        ctx.fillStyle = '#000000';
+        const label = '撮影者:';
+        ctx.fillText(label, x, bottomY);
+        x += ctx.measureText(label).width + gap;
         ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
         ctx.fillStyle = '#666666';
         ctx.fillText(FA_ICON_USER, x, bottomY);
-        x += ctx.measureText(FA_ICON_USER).width + Math.round(6 * scale);
+        x += ctx.measureText(FA_ICON_USER).width + gap;
         ctx.font = `400 ${metaSize}px ${fontFamily}`;
         ctx.fillStyle = '#000000';
-        ctx.fillText(`撮影者: ${inputPhotographer.value}`, x, bottomY);
+        ctx.fillText(inputPhotographer.value, x, bottomY);
     }
 
     // 日付・場所（右寄せ、アイコン + 値 + アイコン + 値）
@@ -1192,7 +1205,7 @@ function updatePreviewFrame() {
 
         const segs = [];
         if (hasDate) {
-            segs.push({ icon: FA_ICON_CALENDAR, text: inputDate.value });
+            segs.push({ icon: FA_ICON_CALENDAR, text: formatDateMMDDYYYY(inputDate.value) });
         }
         if (hasLoc) {
             segs.push({ icon: FA_ICON_LOCATION, text: inputLocation.value });
