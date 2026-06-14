@@ -116,7 +116,6 @@ export function drawImageCover(ctx, img, dx, dy, dw, dh, displayW, displayH) {
  * @param {HTMLCanvasElement} [opts.overlay] - 透過済み画像Canvas
  * @param {{x:number,y:number,scale:number}} [opts.overlayTransform] - オーバーレイ変形
  * @param {string} [opts.title] - タイトル
- * @param {string} [opts.comment] - コメント
  * @param {string} [opts.photographer] - 撮影者
  * @param {string} [opts.date] - 日付
  * @param {string} [opts.location] - 撮影場所
@@ -234,22 +233,6 @@ function drawFrameText(ctx, opts, scale, W, H) {
         ctx.font = `700 ${titleSize}px ${fontFamily}`;
         ctx.textAlign = 'center';
         ctx.fillText(opts.title, centerX, bottomY - Math.round(50 * scale));
-    }
-
-    // コメント
-    if (opts.comment) {
-        const maxCommentW = W - marginX * 2;
-        const commentSize = fitFontSize(ctx, opts.comment, maxCommentW, Math.round(40 * scale), fontFamily);
-        ctx.font = `400 ${commentSize}px ${fontFamily}`;
-        ctx.textAlign = 'center';
-        const commentY = opts.title
-            ? bottomY - Math.round(50 * scale) - Math.round(8 * scale)
-            : bottomY - Math.round(30 * scale);
-        const lines = wrapText(ctx, opts.comment, maxCommentW);
-        lines.forEach((line, i) => {
-            const lineY = commentY - (lines.length - 1 - i) * (commentSize * 1.3);
-            ctx.fillText(line, centerX, lineY);
-        });
     }
 
     // 撮影者（左下：アイコン + ラベル + 名前）

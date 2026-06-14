@@ -45,12 +45,10 @@ test.describe('テキスト入力フォーム', () => {
 
         await page.locator('[data-testid="title-input"]').fill('テストタイトル');
         await page.locator('[data-testid="photographer-input"]').fill('おちょこ');
-        await page.locator('#input-comment').fill('コメントテスト');
         await page.locator('#input-location').fill('東京');
 
         await expect(page.locator('[data-testid="title-input"]')).toHaveValue('テストタイトル');
         await expect(page.locator('[data-testid="photographer-input"]')).toHaveValue('おちょこ');
-        await expect(page.locator('#input-comment')).toHaveValue('コメントテスト');
         await expect(page.locator('#input-location')).toHaveValue('東京');
     });
 
@@ -65,9 +63,11 @@ test.describe('テキスト入力フォーム', () => {
 
         // フレームテキストレイヤーに反映されている
         const title = await page.evaluate(() => document.getElementById('frame-title').textContent);
-        const photographer = await page.evaluate(() => document.getElementById('frame-photographer').textContent);
+        const photographer = await page.evaluate(() =>
+            document.querySelector('#frame-photographer .meta-text').textContent
+        );
         expect(title).toBe('MyTitle');
-        expect(photographer).toBe('撮影者: Ochoco');
+        expect(photographer).toBe('Ochoco');
     });
 
     test('E-TX3: localStorage にフォーム状態が保存され再読込で復元される', async ({ page }) => {

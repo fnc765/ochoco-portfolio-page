@@ -68,7 +68,6 @@ const colorDot = document.getElementById('color-dot');
 const colorValue = document.querySelector('.color-value');
 
 const inputTitle = document.getElementById('input-title');
-const inputComment = document.getElementById('input-comment');
 const inputPhotographer = document.getElementById('input-photographer');
 const inputDate = document.getElementById('input-date');
 const inputLocation = document.getElementById('input-location');
@@ -515,7 +514,7 @@ function bindEvents() {
         void takePicture();
     });
 
-    [inputTitle, inputComment, inputPhotographer, inputDate, inputLocation].forEach(el => {
+    [inputTitle, inputPhotographer, inputDate, inputLocation].forEach(el => {
         el.addEventListener('input', () => {
             saveFormState();
             syncFrameTextLayer();
@@ -1070,7 +1069,6 @@ async function takePicture() {
                 overlayCssWidth: overlayCssWidth,
                 overlayCssHeight: overlayCssHeight,
                 title: inputTitle.value,
-                comment: inputComment.value,
                 photographer: inputPhotographer.value,
                 date: inputDate.value,
                 location: inputLocation.value,
@@ -1112,7 +1110,6 @@ async function takePicture() {
 // =====================================
 function syncFrameTextLayer() {
     document.getElementById('frame-title').textContent = inputTitle.value;
-    document.getElementById('frame-comment').textContent = inputComment.value;
     const photographerEl = document.getElementById('frame-photographer');
     photographerEl.querySelector('.meta-text').textContent = inputPhotographer.value;
     photographerEl.style.display = inputPhotographer.value ? '' : 'none';
@@ -1171,21 +1168,6 @@ function updatePreviewFrame() {
     }
 
     // コメント
-    if (inputComment.value) {
-        const maxW = W - marginX * 2;
-        let size = Math.round(40 * scale);
-        ctx.font = `400 ${size}px ${fontFamily}`;
-        ctx.textAlign = 'center';
-        const commentY = inputTitle.value
-            ? bottomY - Math.round(50 * scale) - Math.round(8 * scale)
-            : bottomY - Math.round(30 * scale);
-        const lines = wrapTextSimple(ctx, inputComment.value, maxW);
-        lines.forEach((line, i) => {
-            const lineY = commentY - (lines.length - 1 - i) * (size * 1.3);
-            ctx.fillText(line, centerX, lineY);
-        });
-    }
-
     // 撮影者（アイコン + ラベル + 名前）
     if (inputPhotographer.value) {
         const metaSize = Math.round(28 * scale);
@@ -1279,7 +1261,6 @@ const STORAGE_KEY = 'pp_state';
 function saveFormState() {
     const state = {
         title: inputTitle.value,
-        comment: inputComment.value,
         photographer: inputPhotographer.value,
         date: inputDate.value,
         location: inputLocation.value,
@@ -1293,7 +1274,6 @@ function restoreFormState() {
         if (!raw) return;
         const state = JSON.parse(raw);
         if (state.title) inputTitle.value = state.title;
-        if (state.comment) inputComment.value = state.comment;
         if (state.photographer) inputPhotographer.value = state.photographer;
         if (state.date) inputDate.value = state.date;
         if (state.location) inputLocation.value = state.location;
@@ -1442,7 +1422,6 @@ async function copyImage() {
 function getShareText() {
     const parts = [];
     if (inputTitle.value) parts.push(inputTitle.value);
-    if (inputComment.value) parts.push(inputComment.value);
 
     // ハッシュタグ
     const tags = ['#PrintPhoto'];
