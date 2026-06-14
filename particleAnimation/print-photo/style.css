@@ -805,26 +805,12 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ===================================
-   デバッグログ（不可視コピー）
+   デバッグログ（DOM上は存在するが画面には描画されない）
+   ユーザー操作起点は「コンソールで window.PrintPhoto.copyDebugLogs()」を直接呼べばよく、
+   ボタン自体はレイアウト/描画に一切影響しない display:none とする。
    =================================== */
 .debug-copy-hidden {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    margin: 0;
-    border: 0;
-    background: transparent;
-    color: transparent;
-    font-size: 0;
-    line-height: 0;
-    opacity: 0;
-    cursor: default;
-    overflow: hidden;
-    pointer-events: auto;
-    z-index: 0;
+    display: none;
 }
 
 /* ===================================
