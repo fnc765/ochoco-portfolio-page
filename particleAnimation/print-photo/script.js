@@ -1398,9 +1398,6 @@ function getShareText() {
     const parts = [];
     if (inputTitle.value) parts.push(inputTitle.value);
     if (inputComment.value) parts.push(inputComment.value);
-    if (inputLocation.value) parts.push(`📍 ${inputLocation.value}`);
-    if (inputDate.value) parts.push(`📅 ${inputDate.value}`);
-    if (inputPhotographer.value) parts.push(`by ${inputPhotographer.value}`);
 
     // ハッシュタグ
     const tags = ['#PrintPhoto'];
@@ -1409,6 +1406,8 @@ function getShareText() {
         if (custom) tags.push(...custom.split(/\s+/).filter(t => t.startsWith('#')));
     } catch (e) {}
     parts.push(tags.join(' '));
+
+    parts.push(window.location.href);
 
     return parts.join('\n');
 }
