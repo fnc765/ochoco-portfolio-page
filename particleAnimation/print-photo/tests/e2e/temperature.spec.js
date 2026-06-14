@@ -6,7 +6,7 @@
  * 実機Chromiumで検証する。
  */
 
-import { test, expect, selectImage, startCamera, takePicture, captureFilterOnDraw, captureResultFilterOnAdjust, snapshotSlider } from './helpers.js';
+import { test, expect, selectImage, startCamera, takePicture, captureFilterOnDraw, snapshotSlider } from './helpers.js';
 
 test.describe('色温度 (temperature) スライダー', () => {
     test('E-T1: スライダーが DOM に存在し初期値 0', async ({ page }) => {
@@ -73,12 +73,12 @@ test.describe('色温度 (temperature) スライダー', () => {
         expect(lastFilter).toContain('hue-rotate(22.5deg)');
     });
 
-    test('E-T5: 撮影後のスライダー操作で resultCanvas の描画にも hue-rotate が反映される', async ({ page }) => {
+    test('E-T5: 撮影後のスライダー操作で内部キャンバスの描画にも hue-rotate が反映される', async ({ page }) => {
         await selectImage(page);
         await startCamera(page);
         await takePicture(page);
-        // 撮影後のスライダー操作で renderFrame (document.createElement('canvas')経由) が
-        // 再呼出され、その中で overlay drawImage の ctx.filter に hue-rotate が乗ることを検証
+        // 撮影後のスライダー操作で renderResultThumbnail 内の ctx.filter に hue-rotate が乗ることを検証
+        // 内部キャンバスは document.createElement('canvas') で生成されるため、それをフックする
         const observed = await page.evaluate(async () => {
             const observed = [];
             const origCreate = document.createElement.bind(document);
@@ -91,7 +91,7 @@ test.describe('色温度 (temperature) スライダー', () => {
                         if (type === '2d') {
                             const origDI = ctx.drawImage.bind(ctx);
                             ctx.drawImage = function (...args) {
-                                observed.push({ filter: this.filter, argsCount: args.length });
+                                observed.push({ filter: this.filter, w: el.width, h: el.height });
                                 return origDI(...args);
                             };
                         }

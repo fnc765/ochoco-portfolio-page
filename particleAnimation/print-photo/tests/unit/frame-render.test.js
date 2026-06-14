@@ -404,3 +404,93 @@ describe('タイトルフォント (Noto Sans / oblique 18deg)', () => {
         expect(ctx._transforms.length).toBe(0);
     });
 });
+
+describe('内部キャンバス (撮影後の最終出力 2048x1440)', () => {
+    it('U-FB-1: 白額縁 (四隅) は白 (#ffffff) で塗りつぶされている', () => {
+        const bg = document.createElement('canvas');
+        bg.width = 1920;
+        bg.height = 1080;
+        const bgCtx = bg.getContext('2d');
+        bgCtx.fillStyle = '#3a8a3a';
+        bgCtx.fillRect(0, 0, bg.width, bg.height);
+
+        const result = renderFrame({
+            background: bg,
+            outputWidth: 2048,
+            outputHeight: 1440,
+        });
+
+        const ctx = result.getContext('2d');
+        // 四隅
+        const corners = [
+            [10, 10],
+            [result.width - 10, 10],
+            [10, result.height - 10],
+            [result.width - 10, result.height - 10],
+        ];
+        for (const [x, y] of corners) {
+            const p = ctx.getImageData(x, y, 1, 1).data;
+            expect(p[0]).toBe(255);
+            expect(p[1]).toBe(255);
+            expect(p[2]).toBe(255);
+        }
+    });
+
+    it('U-FB-2: 絵エリア (中央 1920x1080 領域) にはカメラ映像が描画されている', () => {
+        const bg = document.createElement('canvas');
+        bg.width = 1920;
+        bg.height = 1080;
+        const bgCtx = bg.getContext('2d');
+        // 緑系で塗りつぶし → 絵エリアはこの色になるはず
+        bgCtx.fillStyle = '#3a8a3a';
+        bgCtx.fillRect(0, 0, bg.width, bg.height);
+
+        const result = renderFrame({
+            background: bg,
+            outputWidth: 2048,
+            outputHeight: 1440,
+        });
+
+        const ctx = result.getContext('2d');
+        // 絵エリアの中央 (64 + 1920/2, 69 + 1080/2) 周辺
+        const centerX = Math.round(64 + 1920 / 2);
+        const centerY = Math.round(69 + 1080 / 2);
+        const p = ctx.getImageData(centerX, centerY, 1, 1).data;
+        // 緑系 (#3a8a3a = R:58, G:138, B:58) のはず
+        expect(p[0]).toBe(58);
+        expect(p[1]).toBe(138);
+        expect(p[2]).toBe(58);
+    });
+
+    it('U-FB-3: 撮影後のスライダー再描画で背景 null でも canvas は生成される', () => {
+        const overlay = document.createElement('canvas');
+        overlay.width = 100;
+        overlay.height = 100;
+        const ovCtx = overlay.getContext('2d');
+        ovCtx.fillStyle = '#ff00ff';
+        ovCtx.fillRect(0, 0, 100, 100);
+
+        const result = renderFrame({
+            background: null, // 撮影後の背景なし再描画
+            overlay,
+            overlayTransform: { x: 0, y: 0, scale: 1 },
+            overlayCssWidth: 1920,
+            overlayCssHeight: 1080,
+            outputWidth: 2048,
+            outputHeight: 1440,
+        });
+
+        const ctx = result.getContext('2d');
+        // 絵エリアは黒 (背景 null のため)
+        const centerX = Math.round(64 + 1920 / 2);
+        const centerY = Math.round(69 + 1080 / 2);
+        const p = ctx.getImageData(centerX, centerY, 1, 1).data;
+        expect(p[0]).toBe(0);
+        expect(p[1]).toBe(0);
+        expect(p[2]).toBe(0);
+
+        // 四隅は白
+        const corner = ctx.getImageData(10, 10, 1, 1).data;
+        expect(corner[0]).toBe(255);
+    });
+});

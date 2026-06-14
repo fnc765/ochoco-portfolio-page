@@ -14,17 +14,57 @@ export const TEST_IMAGE = 'tests/e2e/test-assets/green-screen.png';
  * navigator.mediaDevices.getUserMedia と geolocation をモックする init script。
  * beforeEach で context.addInitScript(installApiMocks) として使う。
  *
- * getUserMedia は空のMediaStreamを返すモック。videoWidth/Height は getSettings()
- * がないので 0 になるが、本テストではカメラ映像の drawImage までは検証しない。
- * 撮影時の挙動は takePicture ヘルパー内で waitForVideoReady が ready 判定を通すため、
- * 「カメラ停止→再起動」の遷移を主眼に検証する。
+ * カメラ映像の代わりに、テスト用 canvas からの captureStream を MediaStream として返す。
+ * これにより videoWidth/videoHeight/track が有効になり、撮影フローが実機と同様に動作する。
  */
 export function installApiMocks() {
     return `
         if (!navigator.mediaDevices) {
             navigator.mediaDevices = {};
         }
-        navigator.mediaDevices.getUserMedia = async () => new MediaStream();
+        navigator.mediaDevices.getUserMedia = async (constraints) => {
+            // 制約チェックを通すため、すべての制約を満たす track を作成
+            const c = document.createElement('canvas');
+            const w = (constraints && constraints.video && constraints.video.width && constraints.video.width.ideal) || 1920;
+            const h = (constraints && constraints.video && constraints.video.height && constraints.video.height.ideal) || 1080;
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext('2d');
+            // 単色 (緑系) で塗り、カメラ映像の代わりに使う
+            ctx.fillStyle = '#3a8a3a';
+            ctx.fillRect(0, 0, c.width, c.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '48px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('MOCK CAM', c.width / 2, c.height / 2);
+            const stream = c.captureStream(15);
+            // captureStream の track に facingMode / width / height を settings として持たせる
+            try {
+                const track = stream.getVideoTracks()[0];
+                if (track) {
+                    const settings = {
+                        width: w,
+                        height: h,
+                        frameRate: 15,
+                        deviceId: 'mock-device',
+                    };
+                    // facingMode は facingMode が要求されていれば設定
+                    if (constraints?.video?.facingMode) {
+                        const fm = constraints.video.facingMode;
+                        settings.facingMode = typeof fm === 'string' ? fm : (fm.ideal || fm.exact || 'environment');
+                    }
+                    Object.defineProperty(track, 'getSettings', {
+                        value: () => settings,
+                        configurable: true,
+                    });
+                }
+            } catch (e) {
+                // ignore
+            }
+            window.__mockCameraCanvas = c;
+            return stream;
+        };
         navigator.geolocation.getCurrentPosition = (success) => {
             success({ coords: { latitude: 35.0, longitude: 139.0 } });
         };
@@ -113,17 +153,20 @@ export async function startCamera(page) {
 }
 
 /**
- * 撮影 → CAPTURED 状態 (resultCanvas 表示)
+ * 撮影 → CAPTURED 状態。内部キャンバス (2048x1440) が生成されていることを確認。
+ * 表示は HTML 構造（白額縁・黒絵エリア・テキスト）がそのまま使われる。
  */
 export async function takePicture(page) {
     await page.click('[data-testid="shutter-btn"]');
     await expect(page.locator('[data-testid="shutter-btn"]')).toContainText('再撮影');
     await expect(page.locator('#photo-frame')).toHaveClass(/pp-captured/);
-    // resultCanvas に意味のあるサイズが設定されている
+    // 内部キャンバスが 2048x1440 で生成されるのを待つ
     await page.waitForFunction(() => {
-        const c = document.getElementById('result-canvas');
-        return c && c.width > 0 && c.height > 0;
-    });
+        const s = window.PrintPhoto && window.PrintPhoto.getState && window.PrintPhoto.getState();
+        if (!s) return false;
+        const c = s.getInternalResultCanvas && s.getInternalResultCanvas();
+        return c && c.width === 2048 && c.height === 1440;
+    }, { timeout: 5000 });
 }
 
 /**
@@ -226,26 +269,41 @@ export async function captureRenderFrameFilters(page, sliderId, value) {
 }
 
 /**
- * 撮影後 (CAPTURED) の resultCanvas 再描画 ctx.filter を観測する。
- * スライダー操作で renderResultFromState が走る際の filter を検証する。
+ * 撮影後 (CAPTURED) のスライダー操作で renderResultThumbnail 内の ctx.filter を観測する。
+ * 内部キャンバスは document.createElement('canvas') で生成されるため、それをフックする。
  */
 export async function captureResultFilterOnAdjust(page, sliderId, value) {
     return await page.evaluate(async ({ sliderId, value }) => {
         const slider = document.getElementById(sliderId);
         if (!slider) throw new Error('Slider not found: ' + sliderId);
-        const resultCanvas = document.getElementById('result-canvas');
-        if (!resultCanvas) throw new Error('result-canvas not found');
-        const ctx = resultCanvas.getContext('2d');
         const observed = [];
-        const origDI = ctx.drawImage.bind(ctx);
-        ctx.drawImage = function (...args) {
-            observed.push(this.filter);
-            return origDI(...args);
+        const origCreate = document.createElement.bind(document);
+        document.createElement = function (tag) {
+            const el = origCreate(tag);
+            if (tag === 'canvas') {
+                const origGet = el.getContext.bind(el);
+                el.getContext = function (type) {
+                    const ctx = origGet(type);
+                    if (type === '2d') {
+                        const origDI = ctx.drawImage.bind(ctx);
+                        ctx.drawImage = function (...args) {
+                            observed.push({ filter: this.filter, w: el.width, h: el.height });
+                            return origDI(...args);
+                        };
+                    }
+                    return ctx;
+                };
+            }
+            return el;
         };
-        slider.value = String(value);
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
-        await new Promise(r => setTimeout(r, 0));
-        ctx.drawImage = origDI;
+        try {
+            slider.value = String(value);
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
+            // 縮小版 + rAF での最終版の両方が走るのを待つ
+            await new Promise(r => setTimeout(r, 200));
+        } finally {
+            document.createElement = origCreate;
+        }
         return observed;
     }, { sliderId, value });
 }

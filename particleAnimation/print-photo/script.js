@@ -85,7 +85,6 @@ const btnCancelWarning = document.getElementById('btn-cancel-warning');
 const btnRemoveLocation = document.getElementById('btn-remove-location');
 const btnContinueWarning = document.getElementById('btn-continue-warning');
 
-const resultCanvas = document.getElementById('result-canvas');
 const btnShare = document.getElementById('btn-share');
 const btnSavePng = document.getElementById('btn-save-png');
 
@@ -107,6 +106,17 @@ const SHUTTER_STATE = {
 let shutterState = 'IDLE';
 let isCaptured = false;
 let isImageReady = false;
+
+// 撮影後の最終結果 (2048x1440) を内部に保持。表示はせず保存/共有でのみ利用
+let internalResultCanvas = null;
+// 撮影後のスライダー操作中は縮小版 (512x361) を保持し、保存/change/click イベント時に最終版を生成
+let internalResultThumbnailCanvas = null;
+let pendingFullRender = false;
+let fullRenderScheduled = false;
+const FULL_RENDER_W = 2048;
+const FULL_RENDER_H = 1440;
+const THUMB_RENDER_W = 512;
+const THUMB_RENDER_H = 361; // 64:45 を維持
 
 function setShutterState(next) {
     const cfg = SHUTTER_STATE[next];
@@ -531,6 +541,24 @@ function bindEvents() {
     brightnessSlider.addEventListener('input', onExposureInput);
     contrastSlider.addEventListener('input', onExposureInput);
     temperatureSlider.addEventListener('input', onExposureInput);
+    // スライダーから手を離した/change確定時に最終 2048x1440 を即時生成
+    const finalizeOnCommit = () => {
+        if (!isCaptured) return;
+        try {
+            internalResultCanvas = renderFrame({
+                ...buildRenderOptions(),
+                outputWidth: FULL_RENDER_W,
+                outputHeight: FULL_RENDER_H,
+            });
+            pendingFullRender = false;
+            addDebugLog('slider-commit-full-render', {});
+        } catch (e) {
+            addDebugLog('slider-commit-error', { message: e.message });
+        }
+    };
+    [brightnessSlider, contrastSlider, temperatureSlider].forEach(s => {
+        s.addEventListener('change', finalizeOnCommit);
+    });
 
     // ドラッグ・ピンチ
     overlayCanvas.addEventListener('pointerdown', handlePointerDown);
@@ -736,8 +764,9 @@ async function applyImage(dataUrl, saveHistory) {
         } else if (shutterState === 'CAPTURED') {
             setShutterState('IDLE');
             isCaptured = false;
-            resultCanvas.width = 0;
-            resultCanvas.height = 0;
+            internalResultCanvas = null;
+            internalResultThumbnailCanvas = null;
+            pendingFullRender = false;
         }
     } catch (err) {
         console.error('Image load failed:', err);
@@ -869,7 +898,8 @@ async function takePicture() {
             } catch (e) { /* noop */ }
         }
 
-        const frameCanvas = renderFrame({
+        // 内部キャンバス (2048x1440) を生成。画面には出さず保存/共有でのみ使用
+        internalResultCanvas = renderFrame({
             background: hasRenderableVideoFrame(videoElement) ? videoElement : null,
             backgroundDisplayWidth: bgDisplayW,
             backgroundDisplayHeight: bgDisplayH,
@@ -886,15 +916,14 @@ async function takePicture() {
             saturation: 100,
             temperature: parseInt(temperatureSlider.value, 10),
         });
-
-        resultCanvas.width = frameCanvas.width;
-        resultCanvas.height = frameCanvas.height;
-        resultCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
+        internalResultThumbnailCanvas = null; // 撮影時は最終版が最新
+        pendingFullRender = false;
+        fullRenderScheduled = false;
         isCaptured = true;
         syncFrameTextLayer();
         stopCameraInternal(true);
         setShutterState('CAPTURED');
-        addDebugLog('takePicture-complete', { resultCanvas: { w: resultCanvas.width, h: resultCanvas.height } });
+        addDebugLog('takePicture-complete', { resultCanvas: { w: internalResultCanvas.width, h: internalResultCanvas.height } });
     } catch (err) {
         addDebugLog('takePicture-error', { message: err.message, stack: err.stack });
         showToast('撮影中にエラーが発生しました');
@@ -904,6 +933,10 @@ async function takePicture() {
 
 async function retakePicture() {
     isCaptured = false;
+    internalResultCanvas = null;
+    internalResultThumbnailCanvas = null;
+    pendingFullRender = false;
+    fullRenderScheduled = false;
     setShutterState('STARTING');
     const preflightMessage = getCameraPreflightMessage();
     if (preflightMessage) {
@@ -921,18 +954,25 @@ async function retakePicture() {
 }
 
 // =====================================
-// 撮影後の resultCanvas 再描画
+// 撮影後の内部キャンバス再描画
+// - スライダー操作中は縮小版 (512x361) を即時生成
+// - 最終 2048x1440 は change/click/保存 ボタン押下時に rAF で生成
 // =====================================
 function renderResultFromState() {
     if (!isCaptured) return;
+    renderResultThumbnail();
+    scheduleFullRender();
+}
+
+function buildRenderOptions() {
     const overlayCssWidth = frameContent ? frameContent.offsetWidth : overlayCanvas.width;
     const overlayCssHeight = frameContent ? frameContent.offsetHeight : overlayCanvas.height;
-    const frameCanvas = renderFrame({
-        background: null,
+    return {
+        background: null, // 撮影後の再描画ではカメラ映像は再撮影しない
         overlay: overlayImageCanvas,
         overlayTransform: overlayTransform,
-        overlayCssWidth: overlayCssWidth,
-        overlayCssHeight: overlayCssHeight,
+        overlayCssWidth,
+        overlayCssHeight,
         title: inputTitle.value,
         photographer: inputPhotographer.value,
         date: inputDate.value,
@@ -941,10 +981,41 @@ function renderResultFromState() {
         contrast: parseInt(contrastSlider.value, 10),
         saturation: 100,
         temperature: parseInt(temperatureSlider.value, 10),
+    };
+}
+
+function renderResultThumbnail() {
+    try {
+        internalResultThumbnailCanvas = renderFrame({
+            ...buildRenderOptions(),
+            outputWidth: THUMB_RENDER_W,
+            outputHeight: THUMB_RENDER_H,
+        });
+    } catch (e) {
+        addDebugLog('renderResultThumbnail-error', { message: e.message });
+    }
+}
+
+function scheduleFullRender() {
+    pendingFullRender = true;
+    if (fullRenderScheduled) return;
+    fullRenderScheduled = true;
+    requestAnimationFrame(() => {
+        fullRenderScheduled = false;
+        if (!pendingFullRender) return;
+        if (!isCaptured) return;
+        try {
+            internalResultCanvas = renderFrame({
+                ...buildRenderOptions(),
+                outputWidth: FULL_RENDER_W,
+                outputHeight: FULL_RENDER_H,
+            });
+            pendingFullRender = false;
+            addDebugLog('renderResultFull-complete', { w: internalResultCanvas.width, h: internalResultCanvas.height });
+        } catch (e) {
+            addDebugLog('renderResultFull-error', { message: e.message });
+        }
     });
-    const ctx = resultCanvas.getContext('2d');
-    ctx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
-    ctx.drawImage(frameCanvas, 0, 0);
 }
 
 // =====================================
@@ -1046,15 +1117,36 @@ function proceedWithAction() {
 // =====================================
 // 保存（PNGダウンロード）
 // =====================================
+function getResultCanvas() {
+    if (!isCaptured || !internalResultCanvas) {
+        return null;
+    }
+    // もしスライダー操作などで pending なら即時最終版を確定
+    if (pendingFullRender) {
+        try {
+            internalResultCanvas = renderFrame({
+                ...buildRenderOptions(),
+                outputWidth: FULL_RENDER_W,
+                outputHeight: FULL_RENDER_H,
+            });
+            pendingFullRender = false;
+        } catch (e) {
+            addDebugLog('save-sync-render-error', { message: e.message });
+        }
+    }
+    return internalResultCanvas;
+}
+
 function savePng() {
-    if (!resultCanvas.width) {
+    const canvas = getResultCanvas();
+    if (!canvas) {
         showToast('保存する画像がありません');
         return;
     }
     const now = new Date();
     const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
     const filename = `PrintPhoto_${ts}.png`;
-    downloadCanvas(resultCanvas, filename);
+    downloadCanvas(canvas, filename);
     showToast('画像を保存しました');
 }
 
@@ -1069,11 +1161,12 @@ function downloadCanvas(canvas, filename) {
 // 共有
 // =====================================
 async function shareImage() {
-    if (!resultCanvas.width) {
+    const canvas = getResultCanvas();
+    if (!canvas) {
         showToast('共有する画像がありません');
         return;
     }
-    const blob = await new Promise(resolve => resultCanvas.toBlob(resolve, 'image/png'));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     const file = new File([blob], 'PrintPhoto.png', { type: 'image/png' });
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1255,5 +1348,7 @@ window.PrintPhoto = {
         isCaptured,
         isImageReady,
         selectedImageDataUrl,
+        getInternalResultCanvas: () => internalResultCanvas,
+        getInternalResultThumbnailCanvas: () => internalResultThumbnailCanvas,
     }),
 };
