@@ -1,6 +1,11 @@
 # Cloudflare Pages セキュリティヘッダー設定
 # https://developers.cloudflare.com/pages/configuration/headers/
 
+# PrintPhoto: HTML/JS/CSS は更新ごとに必ず再検証 (?v=N 不要)
+# 最上段に配置 (specific rule の優先評価を期待)
+/print-photo/*
+  Cache-Control: public, max-age=0, must-revalidate
+
 # サイト全体
 /*
   X-Content-Type-Options: nosniff
@@ -12,8 +17,3 @@
 /ohatui-db/admin/*
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'
-
-# PrintPhoto: HTML/JS/CSS は更新ごとに必ず再検証 (?v=N 不要)
-# 画像は元のパスで参照されるため同ルールに含まれるが、ETag 検証で実体再送は抑えられる
-/print-photo/*
-  Cache-Control: public, max-age=0, must-revalidate
