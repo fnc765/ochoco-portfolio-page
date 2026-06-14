@@ -12,3 +12,9 @@
 /ohatui-db/admin/*
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'
+
+# PrintPhoto: JS/CSS は更新ごとに必ず再検証 (?v=N 不要)
+/print-photo/*.js
+  Cache-Control: public, max-age=0, must-revalidate
+/print-photo/*.css
+  Cache-Control: public, max-age=0, must-revalidate
