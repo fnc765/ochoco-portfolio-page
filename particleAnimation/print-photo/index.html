@@ -113,11 +113,13 @@
              ================================= -->
         <div class="pp-preview-wrap" data-testid="preview-wrap">
             <div class="photo-frame" id="photo-frame">
-                <video id="camera-video" autoplay playsinline muted webkit-playsinline class="camera-video"></video>
-                <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
-                <div id="placeholder" class="pp-placeholder" data-testid="preview-placeholder">
-                    <i class="fas fa-camera" aria-hidden="true"></i>
-                    <p>画像を選択してください</p>
+                <div class="frame-content" id="frame-content">
+                    <video id="camera-video" autoplay playsinline muted webkit-playsinline class="camera-video"></video>
+                    <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+                    <div id="placeholder" class="pp-placeholder" data-testid="preview-placeholder">
+                        <i class="fas fa-camera" aria-hidden="true"></i>
+                        <p>画像を選択してください</p>
+                    </div>
                 </div>
                 <canvas id="result-canvas" class="result-canvas"></canvas>
                 <!-- フレーム内テキスト（プレビュー用） -->

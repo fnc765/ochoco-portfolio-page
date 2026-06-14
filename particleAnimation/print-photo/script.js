@@ -69,7 +69,7 @@ const adjustTile = document.getElementById('adjust-tile');
 
 let videoElement = document.getElementById('camera-video');
 const overlayCanvas = document.getElementById('overlay-canvas');
-const frameContent = photoFrame; // 互換用（白枠削除で #frame-content は無くなった）
+const frameContent = document.getElementById('frame-content');
 
 const brightnessSlider = document.getElementById('brightness-slider');
 const contrastSlider = document.getElementById('contrast-slider');
