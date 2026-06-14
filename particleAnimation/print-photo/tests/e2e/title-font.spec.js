@@ -1,9 +1,8 @@
 /**
  * PrintPhoto - タイトルフォント (Noto Sans / Noto Sans JP / oblique 18deg) E2Eテスト
  *
- * 合成画面・プレビュー画面それぞれの .frame-title において、
- * 指定のフォント・ウェイト・font-style が computed style として
- * 適用されていることを検証する。
+ * 1ページUIの frame-title において、指定のフォント・ウェイト・font-style が
+ * computed style として適用されていることを検証する。
  */
 
 import { test, expect, openApp } from './helpers.js';
@@ -33,7 +32,6 @@ test.describe('タイトルフォント (Noto Sans / oblique 18deg)', () => {
         const combined = links.join(' ');
         expect(combined).toContain('Noto+Sans');
         expect(combined).toContain('Noto+Sans+JP');
-        // 旧フォントが読み込まれていないこと
         expect(combined).not.toContain('M+PLUS+Rounded+1c');
     });
 
@@ -45,20 +43,16 @@ test.describe('タイトルフォント (Noto Sans / oblique 18deg)', () => {
         expect(fontFamily).toContain('Noto Sans JP');
     });
 
-    test('E-TX-F3: 合成画面の .frame-title に Noto Sans / weight 400 / oblique 18deg が適用', async ({ page }) => {
+    test('E-TX-F3: frame-title に Noto Sans / weight 400 / oblique 18deg が適用される', async ({ page }) => {
         await openApp(page);
 
-        // 合成画面を表示する (#screen-compose 内の #frame-title を対象)
         await page.evaluate(() => {
-            // 合成画面の frame-title を取得可能にするため input 値を流し込む
             const input = document.getElementById('input-title');
             if (input) {
                 input.value = 'plamちゃん！';
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             }
         });
-
-        // DOM 上で #frame-title が描画されるのを待機
         await page.waitForTimeout(200);
 
         const style = await getTitleComputedStyle(page);

@@ -1,17 +1,15 @@
 /**
- * PrintPhoto - 撮影後テキスト入力フォーム E2Eテスト
+ * PrintPhoto - テキスト入力フォーム E2Eテスト
  *
- * タイトル・撮影者・日付・場所の入力が反映され、localStorage へ保存されることを検証する。
+ * 1ページUIでは撮影前後で常時表示。タイトル・撮影者・日付・場所の入力が
+ * プレビュー枠の frame-text-layer に即時反映され、localStorage へ保存される。
  */
 
-import { test, expect, uploadAndOpenCompose, takePictureAndOpenPreview } from './helpers.js';
+import { test, expect, selectAndCapture, openApp } from './helpers.js';
 
 test.describe('テキスト入力フォーム', () => {
-    test('E-TX1: 撮影後フォームにタイトル・撮影者・日付・場所が入力できる', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        await page.waitForTimeout(500);
-        await takePictureAndOpenPreview(page);
-
+    test('E-TX1: 撮影前でもフォームにタイトル・撮影者・日付・場所が入力できる', async ({ page }) => {
+        await openApp(page);
         await page.locator('[data-testid="title-input"]').fill('テストタイトル');
         await page.locator('[data-testid="photographer-input"]').fill('おちょこ');
         await page.locator('#input-location').fill('東京');
@@ -21,11 +19,8 @@ test.describe('テキスト入力フォーム', () => {
         await expect(page.locator('#input-location')).toHaveValue('東京');
     });
 
-    test('E-TX2: 入力したテキストが resultCanvas に反映される', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        await page.waitForTimeout(500);
-        await takePictureAndOpenPreview(page);
-
+    test('E-TX2: 入力したテキストが frame-text-layer に反映される', async ({ page }) => {
+        await selectAndCapture(page);
         await page.locator('[data-testid="title-input"]').fill('MyTitle');
         await page.locator('[data-testid="photographer-input"]').fill('Ochoco');
         await page.waitForTimeout(200);
@@ -38,10 +33,8 @@ test.describe('テキスト入力フォーム', () => {
         expect(photographer).toBe('Ochoco');
     });
 
-    test('E-TX3: localStorage にフォーム状態が保存され再読込で復元される', async ({ page }) => {
-        await uploadAndOpenCompose(page);
-        await page.waitForTimeout(500);
-        await takePictureAndOpenPreview(page);
+    test('E-TX3: localStorage にフォーム状態が保存される', async ({ page }) => {
+        await openApp(page);
         await page.locator('[data-testid="title-input"]').fill('SaveState');
         await page.waitForTimeout(200);
 
