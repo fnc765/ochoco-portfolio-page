@@ -285,6 +285,9 @@ html, body {
     cursor: grab;
     touch-action: none;
     transform-origin: 0 0;
+    /* video-snapshot より上に重ねる (撮影後プレビューで
+       入力画像がカメラ映像の上に重なる) */
+    z-index: 2;
 }
 
 .overlay-canvas:active {

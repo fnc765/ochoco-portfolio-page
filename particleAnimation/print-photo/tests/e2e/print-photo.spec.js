@@ -156,6 +156,51 @@ test('E-U7c: 撮影後の内部キャンバス (保存用) が真っ黒ではな
     expect(isAllBlack).toBe(false);
 });
 
+test('E-U7d: 撮影後の画面プレビューで入力画像 (overlay) がカメラ映像の上に重なって表示される', async ({ page }) => {
+    // transparent-sample.png には中央にマゼンタ (255, 0, 255) の円が含まれる。
+    // モックカメラ映像 (緑 58,138,58) の上に overlay-canvas のマゼンタ円が
+    // 合成されて見えることを、画面上の #photo-frame 領域のスクリーンショットから検証する。
+    await selectAndCapture(page);
+
+    // 撮影後に #photo-frame の領域をキャプチャ
+    const frameEl = page.locator('#photo-frame');
+    const box = await frameEl.boundingBox();
+    expect(box).not.toBeNull();
+    const buf = await page.screenshot({
+        clip: { x: box.x, y: box.y, width: box.width, height: box.height },
+        type: 'png',
+    });
+
+    // ピクセル解析: 緑 (58,138,58) とマゼンタ (255,0,255) の両方が
+    // 存在することを確認 (Node 環境で PNG をデコード)
+    const { PNG } = await import('pngjs');
+    const png = PNG.sync.read(buf);
+    let hasGreen = false;
+    let hasMagenta = false;
+    // 絵エリア領域 (中央 93.75% x 75%) のみサンプリング
+    const sampleW = 64, sampleH = 69, sampleAreaW = 1920, sampleAreaH = 1080;
+    const scaleX = png.width / 2048;
+    const scaleY = png.height / 1440;
+    for (let yi = 0; yi < 10; yi++) {
+        for (let xi = 0; xi < 20; xi++) {
+            const x = Math.floor((sampleW + (sampleAreaW * (xi + 0.5) / 20)) * scaleX);
+            const y = Math.floor((sampleH + (sampleAreaH * (yi + 0.5) / 10)) * scaleY);
+            const idx = (png.width * y + x) << 2;
+            const r = png.data[idx];
+            const g = png.data[idx + 1];
+            const b = png.data[idx + 2];
+            const a = png.data[idx + 3];
+            if (a > 200 && r === 58 && g === 138 && b === 58) hasGreen = true;
+            if (a > 200 && r === 255 && g === 0 && b === 255) hasMagenta = true;
+        }
+    }
+
+    // カメラ映像 (緑) が見える
+    expect(hasGreen).toBe(true);
+    // 入力画像 (マゼンタ円) がカメラ映像の上に見えている
+    expect(hasMagenta).toBe(true);
+});
+
 test('E-U8: 日付が今日の値で自動入力される', async ({ page }) => {
     await openApp(page);
     const browserToday = await page.evaluate(() => {
