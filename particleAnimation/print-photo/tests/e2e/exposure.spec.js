@@ -14,8 +14,8 @@ test.describe('露光調整 (brightness / contrast)', () => {
         const snap = await snapshotSlider(page, 'brightness-slider');
         expect(snap).toBeTruthy();
         expect(snap.value).toBe('100');
-        expect(snap.min).toBe('50');
-        expect(snap.max).toBe('150');
+        expect(snap.min).toBe('0');
+        expect(snap.max).toBe('200');
     });
 
     test('E-E2: brightness=120 で overlay-canvas の ctx.filter に brightness(120%) が含まれる', async ({ page }) => {
