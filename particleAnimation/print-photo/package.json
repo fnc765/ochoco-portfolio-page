@@ -2,19 +2,24 @@
   "name": "print-photo",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --no-cache --configLoader runner",
+    "test:watch": "vitest --configLoader runner",
+    "test:coverage": "vitest run --coverage --no-cache --configLoader runner",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "serve": "node -e \"const {execSync}=require('child_process');const fs=require('fs');try{const hash=execSync('git rev-parse --short HEAD',{encoding:'utf8'}).trim();fs.writeFileSync('version.json',JSON.stringify({commit:hash,date:new Date().toISOString()}));}catch(e){fs.writeFileSync('version.json',JSON.stringify({commit:'unknown',date:new Date().toISOString()}));}\" && npx http-server ./ -p 8080 -s"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0",
-    "@vitest/coverage-v8": "^1.3.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "http-server": "^14.1.1",
     "jsdom": "^24.0.0",
-    "vitest": "^1.3.0"
+    "pngjs": "^7.0.0",
+    "vitest": "^4.1.10"
   }
 }

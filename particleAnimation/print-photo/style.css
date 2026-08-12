@@ -793,6 +793,21 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
     transition: all 0.2s ease;
 }
 
+.thumbnail-select {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.thumbnail-select:focus-visible {
+    outline: 3px solid #ffffff;
+    outline-offset: -3px;
+}
+
 .thumbnail-item:hover {
     transform: scale(1.05);
     border-color: rgba(255, 255, 255, 0.3);
@@ -826,6 +841,17 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 
 .thumbnail-item:hover .thumbnail-delete {
     opacity: 1;
+}
+
+.thumbnail-item:focus-within .thumbnail-delete,
+.thumbnail-delete:focus-visible {
+    opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 768px) {
+    .thumbnail-delete {
+        opacity: 1;
+    }
 }
 
 /* ===================================

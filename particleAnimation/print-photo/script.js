@@ -11,6 +11,7 @@ import {
     startCamera,
     stopCamera,
     setActiveStream,
+    waitForStreamWithTimeout,
 } from './camera.js';
 
 import { renderFrame } from './frame-render.js';
@@ -27,6 +28,13 @@ import {
     deleteThumbnail,
 } from './storage.js';
 
+import { detectInAppBrowser as detectInAppBrowserFromUserAgent } from './browser-detection.js';
+import {
+    createHistoryImageDataUrl,
+    getContainedSize,
+    validateImageFile,
+} from './image-utils.js';
+
 /**
  * 画像を読み込んでCanvasに描画する
  * @param {string} src - DataURL または URL
@@ -37,10 +45,11 @@ function loadImageToCanvas(src) {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
+            const size = getContainedSize(img.naturalWidth, img.naturalHeight, 4096);
+            canvas.width = size.width;
+            canvas.height = size.height;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
+            ctx.drawImage(img, 0, 0, size.width, size.height);
             resolve(canvas);
         };
         img.onerror = reject;
@@ -281,53 +290,39 @@ async function startCameraSession() {
         return true;
     }
 
-    const streamPromise = startCamera(videoElement);
-    streamPromise.then((stream) => {
-        if (requestId !== cameraRequestId) {
-            if (stream?.getTracks) stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
-        }
-    }).catch(() => {});
+    const isCurrentRequest = () => requestId === cameraRequestId;
+    const streamPromise = startCamera(videoElement, { isCurrent: isCurrentRequest });
+    const stream = await waitForStreamWithTimeout(streamPromise, {
+        timeoutMs: CAMERA_REQUEST_TIMEOUT_MS,
+        isCurrent: isCurrentRequest,
+        onTimeout: () => {
+            if (isCurrentRequest()) invalidateCameraRequest();
+        },
+        onDiscard: discardedStream => {
+            if (videoElement.srcObject === discardedStream) videoElement.srcObject = null;
+            setActiveStream(null);
+        },
+    });
 
-    let timeoutId = null;
-    try {
-        const stream = await Promise.race([
-            streamPromise,
-            new Promise((_, reject) => {
-                timeoutId = setTimeout(() => {
-                    reject(createCameraError('TimeoutError', 'ブラウザがカメラ要求を無視しました（Permissions-Policy、アプリ内ブラウザ、またはグローバル設定の可能性）'));
-                }, CAMERA_REQUEST_TIMEOUT_MS);
-            }),
-        ]);
+    onCameraSuccess(stream);
 
-        clearTimeout(timeoutId);
-
-        if (requestId !== cameraRequestId) {
-            if (stream?.getTracks) stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
-            throw createCameraError('AbortError', 'camera request superseded');
-        }
-
-        onCameraSuccess(stream);
-
-        const ready = await waitForVideoReady(videoElement);
-        if (requestId !== cameraRequestId) {
-            return false;
-        }
-
-        if (!ready) {
-            stopCameraInternal(true);
-            throw createCameraError('NotReadableError', 'カメラ映像の準備が完了しませんでした。');
-        }
-
-        addDebugLog('camera-start-ready', {
-            requestId,
-            readyState: videoElement.readyState,
-            videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
-            trackCount: getVideoTrackCount(videoElement),
-        });
-        return true;
-    } finally {
-        clearTimeout(timeoutId);
+    const ready = await waitForVideoReady(videoElement);
+    if (requestId !== cameraRequestId) {
+        return false;
     }
+
+    if (!ready) {
+        stopCameraInternal(true);
+        throw createCameraError('NotReadableError', 'カメラ映像の準備が完了しませんでした。');
+    }
+
+    addDebugLog('camera-start-ready', {
+        requestId,
+        readyState: videoElement.readyState,
+        videoSize: { w: videoElement.videoWidth, h: videoElement.videoHeight },
+        trackCount: getVideoTrackCount(videoElement),
+    });
+    return true;
 }
 
 /**
@@ -541,6 +536,8 @@ function bindEvents() {
     openHistoryBtn.addEventListener('click', openHistoryModal);
     closeHistoryBtn.addEventListener('click', closeHistoryModal);
     historyModal.querySelector('.modal-overlay').addEventListener('click', closeHistoryModal);
+    locationWarningModal.querySelector('.modal-overlay').addEventListener('click', hideLocationWarning);
+    document.addEventListener('keydown', handleModalKeydown);
 
     btnShutter.addEventListener('click', handleShutterClick);
 
@@ -555,8 +552,8 @@ function bindEvents() {
     // メタ入力 → プレビュー再描画 + 撮影後ならresultCanvas再描画
     [inputTitle, inputPhotographer, inputDate, inputLocation].forEach(el => {
         el.addEventListener('input', () => {
-            saveFormState();
             syncFrameTextLayer();
+            saveFormState();
             if (isCaptured) {
                 renderResultFromState();
             }
@@ -600,7 +597,17 @@ function bindEvents() {
     btnCancelWarning.addEventListener('click', hideLocationWarning);
     btnRemoveLocation.addEventListener('click', () => {
         inputLocation.value = '';
+        syncFrameTextLayer();
         saveFormState();
+        if (isCaptured) {
+            internalResultCanvas = renderFrame({
+                ...buildRenderOptions(),
+                outputWidth: FULL_RENDER_W,
+                outputHeight: FULL_RENDER_H,
+            });
+            internalResultThumbnailCanvas = null;
+            pendingFullRender = false;
+        }
         hideLocationWarning();
         proceedWithAction();
     });
@@ -627,6 +634,9 @@ function bindEvents() {
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && isCameraActive) {
             stopCameraInternal();
+            if (shutterState === 'LIVE' || shutterState === 'STARTING') {
+                setShutterState('IDLE');
+            }
             addDebugLog('visibilitychange', { action: 'stop-camera', reason: 'page-hidden' });
         }
     });
@@ -641,18 +651,7 @@ function bindEvents() {
 // アプリ内ブラウザ検出
 // =====================================
 function detectInAppBrowser() {
-    const ua = navigator.userAgent || '';
-    const standAlone = navigator.standalone;
-    if (/Line\//i.test(ua)) return 'LINE';
-    if (/Instagram/i.test(ua)) return 'Instagram';
-    if (/FBAN|FBAV/i.test(ua)) return 'Facebook';
-    if (/Twitter/i.test(ua)) return 'Twitter/X';
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
-    if (isIOS && !isSafari && !standAlone) {
-        return 'アプリ内';
-    }
-    return null;
+    return detectInAppBrowserFromUserAgent(navigator.userAgent || '', navigator.standalone);
 }
 
 function isCameraAllowedByPolicy() {
@@ -761,6 +760,12 @@ function redrawOverlayCanvas() {
 async function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+        showToast(validation.message);
+        imageInput.value = '';
+        return;
+    }
     const reader = new FileReader();
     reader.onload = async (ev) => {
         await applyImage(ev.target.result, true);
@@ -778,7 +783,7 @@ async function applyImage(dataUrl, saveHistory) {
 
         if (saveHistory) {
             try {
-                await saveThumbnail(dataUrl);
+                await saveThumbnail(createHistoryImageDataUrl(overlayImageCanvas), dataUrl);
                 await restoreThumbnails();
             } catch (e) {
                 console.warn('History save failed:', e);
@@ -831,6 +836,7 @@ function handlePointerMove(e) {
     overlayTransform.x = transformStart.x + dx;
     overlayTransform.y = transformStart.y + dy;
     applyOverlayTransform();
+    if (isCaptured) scheduleFullRender();
 }
 
 function handlePointerUp() {
@@ -857,6 +863,7 @@ function handleTouchMove(e) {
             const newScale = pinchStartScale * (dist / pinchStartDist);
             overlayTransform.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
             applyOverlayTransform();
+            if (isCaptured) scheduleFullRender();
         }
     }
 }
@@ -889,8 +896,8 @@ async function startCameraFromShutter() {
         return;
     }
     try {
-        await startCameraSession();
-        setShutterState('LIVE');
+        const started = await startCameraSession();
+        if (started) setShutterState('LIVE');
     } catch (err) {
         if (err.name !== 'AbortError') onCameraError(err);
         setShutterState('ERROR');
@@ -1013,8 +1020,8 @@ async function retakePicture() {
         return;
     }
     try {
-        await startCameraSession();
-        setShutterState('LIVE');
+        const started = await startCameraSession();
+        if (started) setShutterState('LIVE');
     } catch (err) {
         if (err.name !== 'AbortError') onCameraError(err);
         setShutterState('ERROR');
@@ -1129,7 +1136,13 @@ function saveFormState() {
         date: inputDate.value,
         location: inputLocation.value,
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return true;
+    } catch (error) {
+        addDebugLog('form-state-save-failed', { name: error.name, message: error.message });
+        return false;
+    }
 }
 
 function restoreFormState() {
@@ -1149,13 +1162,69 @@ function restoreFormState() {
 // =====================================
 // 履歴モーダル
 // =====================================
+const modalTriggers = new WeakMap();
+
+function getFocusableElements(modal) {
+    return Array.from(modal.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => !element.hidden && element.offsetParent !== null);
+}
+
+function showModal(modal, initialFocus) {
+    modalTriggers.set(modal, document.activeElement);
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => {
+        if (modal.contains(document.activeElement)) return;
+        const target = initialFocus || getFocusableElements(modal)[0];
+        target?.focus();
+    });
+}
+
+function closeModal(modal) {
+    modal.style.display = 'none';
+    const trigger = modalTriggers.get(modal);
+    modalTriggers.delete(modal);
+    if (trigger?.isConnected) trigger.focus();
+}
+
+function getOpenModal() {
+    return [locationWarningModal, historyModal].find(modal => modal.style.display !== 'none') || null;
+}
+
+function handleModalKeydown(event) {
+    const modal = getOpenModal();
+    if (!modal) return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        if (modal === locationWarningModal) hideLocationWarning();
+        else closeHistoryModal();
+        return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = getFocusableElements(modal);
+    if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+}
+
 function openHistoryModal() {
     restoreThumbnails();
-    historyModal.style.display = 'flex';
+    showModal(historyModal, closeHistoryBtn);
 }
 
 function closeHistoryModal() {
-    historyModal.style.display = 'none';
+    closeModal(historyModal);
 }
 
 // =====================================
@@ -1173,11 +1242,11 @@ function handleActionWithWarning(action) {
 }
 
 function showLocationWarning() {
-    locationWarningModal.style.display = 'flex';
+    showModal(locationWarningModal, btnCancelWarning);
 }
 
 function hideLocationWarning() {
-    locationWarningModal.style.display = 'none';
+    closeModal(locationWarningModal);
 }
 
 function proceedWithAction() {
@@ -1241,6 +1310,10 @@ async function shareImage() {
         return;
     }
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) {
+        showToast('画像の共有準備に失敗しました');
+        return;
+    }
     const file = new File([blob], 'PrintPhoto.png', { type: 'image/png' });
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1253,9 +1326,8 @@ async function shareImage() {
             showToast('共有しました');
             return;
         } catch (err) {
-            if (err.name !== 'AbortError') {
-                console.error('Share failed:', err);
-            }
+            if (err.name === 'AbortError') return;
+            console.error('Share failed:', err);
         }
     }
     openXIntent();
@@ -1348,13 +1420,22 @@ async function restoreThumbnails() {
 }
 
 function renderThumbnails(thumbs) {
+    const activeControl = thumbnailGrid.contains(document.activeElement)
+        ? document.activeElement.closest('.thumbnail-select, .thumbnail-delete')
+        : null;
+    const focusToRestore = activeControl
+        ? { id: activeControl.dataset.id, className: activeControl.className }
+        : null;
+
     if (!thumbs || thumbs.length === 0) {
         thumbnailGrid.innerHTML = '<p class="empty-text" data-testid="thumbnail-empty">まだ履歴がありません</p>';
         return;
     }
     thumbnailGrid.innerHTML = thumbs.map(t => `
         <div class="thumbnail-item" data-id="${t.id}">
-            <img src="${t.dataUrl}" alt="履歴画像" loading="lazy">
+            <button type="button" class="thumbnail-select" data-id="${t.id}" aria-label="履歴画像を使用">
+                <img src="${t.dataUrl}" alt="" loading="lazy">
+            </button>
             <button class="thumbnail-delete" data-id="${t.id}" aria-label="削除">×</button>
         </div>
     `).join('');
@@ -1372,9 +1453,9 @@ function renderThumbnails(thumbs) {
         });
     });
 
-    thumbnailGrid.querySelectorAll('.thumbnail-item').forEach(item => {
-        item.addEventListener('click', async () => {
-            const id = item.dataset.id;
+    thumbnailGrid.querySelectorAll('.thumbnail-select').forEach(button => {
+        button.addEventListener('click', async () => {
+            const id = button.dataset.id;
             try {
                 const dataUrl = await loadThumbnail(id);
                 if (!dataUrl) {
@@ -1389,6 +1470,12 @@ function renderThumbnails(thumbs) {
             }
         });
     });
+
+    if (focusToRestore) {
+        const replacement = Array.from(thumbnailGrid.querySelectorAll(`.${focusToRestore.className}`))
+            .find(element => element.dataset.id === focusToRestore.id);
+        replacement?.focus();
+    }
 }
 
 // =====================================
@@ -1399,6 +1486,9 @@ function showToast(message) {
     if (!toast) {
         toast = document.createElement('div');
         toast.className = 'toast';
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
+        toast.setAttribute('aria-atomic', 'true');
         document.body.appendChild(toast);
     }
     toast.textContent = message;

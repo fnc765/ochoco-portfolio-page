@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { renderFrame, drawImageCover, formatDateMMDDYYYY } from '../../frame-render.js';
+import {
+    renderFrame,
+    drawImageCover,
+    formatDateMMDDYYYY,
+    truncateTextToWidth,
+} from '../../frame-render.js';
 
 describe('frame-render', () => {
     it('U-F1: フレーム座標計算（出力サイズ2048x1440）', () => {
@@ -110,6 +115,29 @@ describe('frame-render', () => {
         expect(centerPixel[0]).toBe(0);   // R
         expect(centerPixel[1]).toBe(255); // G
         expect(centerPixel[2]).toBe(0);   // B
+    });
+
+    it('U-F8: 端末が縦向きでもCanvasの実ピクセル範囲外を切り出さない', () => {
+        const originalWidth = window.innerWidth;
+        const originalHeight = window.innerHeight;
+        Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+        Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true });
+
+        const calls = [];
+        const ctx = { drawImage: (...args) => calls.push(args) };
+        const landscapeCanvas = { width: 1920, height: 1080 };
+        try {
+            drawImageCover(ctx, landscapeCanvas, 0, 0, 1920, 1080, 390, 219);
+        } finally {
+            Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true });
+            Object.defineProperty(window, 'innerHeight', { value: originalHeight, configurable: true });
+        }
+
+        const [, sx, sy, sw, sh] = calls[0];
+        expect(sx).toBeGreaterThanOrEqual(0);
+        expect(sy).toBeGreaterThanOrEqual(0);
+        expect(sx + sw).toBeLessThanOrEqual(landscapeCanvas.width);
+        expect(sy + sh).toBeLessThanOrEqual(landscapeCanvas.height);
     });
 
     // ============================================
@@ -338,6 +366,14 @@ describe('formatDateMMDDYYYY', () => {
 
     it('U-FD3: 既にMM/DD/YYYY形式の場合はそのまま返す', () => {
         expect(formatDateMMDDYYYY('06/13/2026')).toBe('06/13/2026');
+    });
+});
+
+describe('長いメタ情報の収まり', () => {
+    it('U-FM1: 指定幅を超える文字列を省略記号付きで短縮する', () => {
+        const ctx = { measureText: text => ({ width: text.length * 10 }) };
+        expect(truncateTextToWidth(ctx, '123456789', 50)).toBe('1234…');
+        expect(truncateTextToWidth(ctx, '1234', 50)).toBe('1234');
     });
 });
 

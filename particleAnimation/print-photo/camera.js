@@ -4,6 +4,20 @@
 
 let activeStream = null;
 
+function createCameraError(name, message) {
+    const error = new Error(message);
+    error.name = name;
+    return error;
+}
+
+function stopStreamTracks(stream) {
+    if (!stream?.getTracks) return;
+    stream.getTracks().forEach(track => {
+        try { track.stop(); } catch (error) { /* noop */ }
+    });
+    if (activeStream === stream) activeStream = null;
+}
+
 function isLoopbackHost(hostname) {
     return hostname === 'localhost' || hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(hostname);
 }
@@ -13,7 +27,7 @@ function isLoopbackHost(hostname) {
  * @param {HTMLVideoElement} videoElement
  * @returns {Promise<MediaStream>}
  */
-export async function startCamera(videoElement) {
+export async function startCamera(videoElement, { isCurrent = () => true } = {}) {
     // HTTPSチェックは行うが、エラーとしてスローせず警告のみにする
     // （getUserMedia が呼べない場合はブラウザが自動で拒否する）
     const isSecure = window.isSecureContext || window.location.protocol === 'https:' || isLoopbackHost(window.location.hostname);
@@ -35,20 +49,21 @@ export async function startCamera(videoElement) {
         audio: false,
     };
 
+    let stream;
     try {
-        activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
         if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
             // 1回目: facingMode を外してリトライ
             try {
-                activeStream = await navigator.mediaDevices.getUserMedia({
+                stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
                     audio: false,
                 });
             } catch (err2) {
                 // 2回目: video 制約なしでリトライ (環境カメラ制約を満たす track がない場合)
                 if (err2.name === 'OverconstrainedError' || err2.name === 'NotFoundError') {
-                    activeStream = await navigator.mediaDevices.getUserMedia({
+                    stream = await navigator.mediaDevices.getUserMedia({
                         video: true,
                         audio: false,
                     });
@@ -61,6 +76,12 @@ export async function startCamera(videoElement) {
         }
     }
 
+    if (!isCurrent()) {
+        stopStreamTracks(stream);
+        throw createCameraError('AbortError', 'camera request superseded');
+    }
+
+    activeStream = stream;
     videoElement.srcObject = activeStream;
     videoElement.onloadedmetadata = () => {
         videoElement.play().catch(() => {});
@@ -70,12 +91,61 @@ export async function startCamera(videoElement) {
 }
 
 /**
+ * カメラ取得Promiseにタイムアウトを付与する。
+ * タイムアウト後または別リクエストへ切り替わった後に到着したStreamは必ず停止する。
+ * @param {Promise<MediaStream>} streamPromise
+ * @param {{timeoutMs:number,isCurrent?:()=>boolean,onTimeout?:()=>void,onDiscard?:(stream:MediaStream)=>void}} options
+ * @returns {Promise<MediaStream>}
+ */
+export async function waitForStreamWithTimeout(streamPromise, {
+    timeoutMs,
+    isCurrent = () => true,
+    onTimeout = () => {},
+    onDiscard = () => {},
+}) {
+    let settled = false;
+    let accepted = false;
+    let timeoutId;
+
+    const discard = (stream) => {
+        stopStreamTracks(stream);
+        onDiscard(stream);
+    };
+
+    streamPromise.then(stream => {
+        if (settled && !accepted) discard(stream);
+    }).catch(() => {});
+
+    try {
+        const stream = await Promise.race([
+            streamPromise,
+            new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    onTimeout();
+                    reject(createCameraError('TimeoutError', 'ブラウザがカメラ要求を処理しませんでした。'));
+                }, timeoutMs);
+            }),
+        ]);
+
+        if (!isCurrent()) {
+            discard(stream);
+            throw createCameraError('AbortError', 'camera request superseded');
+        }
+
+        accepted = true;
+        return stream;
+    } finally {
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+}
+
+/**
  * カメラストリームを停止する
  */
 export function stopCamera() {
     if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
-        activeStream = null;
+        stopStreamTracks(activeStream);
     }
 }
 

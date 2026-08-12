@@ -117,7 +117,7 @@ export async function injectMockCameraStream(page) {
  */
 export const test = base.extend({
     context: async ({ context }, use) => {
-        await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:8080' });
+        await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:8080' });
         await context.addInitScript({ content: installApiMocks() });
         await use(context);
     },
@@ -164,7 +164,7 @@ export async function openHistoryAndPick(page, assetPath = TEST_IMAGE) {
     await page.locator('[data-testid="image-input"]').setInputFiles(assetPath);
     await page.waitForTimeout(300);
     await openHistoryModal(page);
-    const item = page.locator('.thumbnail-item').first();
+    const item = page.locator('.thumbnail-select').first();
     await item.click();
     await expect(page.locator('[data-testid="history-modal"]')).toBeHidden();
 }

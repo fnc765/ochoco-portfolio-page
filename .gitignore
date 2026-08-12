@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 package-lock.json
+!particleAnimation/print-photo/package-lock.json
 ohatsui/package.json
 __pycache__/
 

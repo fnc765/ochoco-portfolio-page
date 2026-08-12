@@ -23,17 +23,20 @@ function openDB() {
 }
 
 /**
- * フルサイズ画像をDataURLとして保存
- * @param {string} dataUrl - 画像DataURL
+ * 履歴表示用画像と、再利用時の高解像度画像を保存
+ * @param {string} dataUrl - 履歴表示用の画像DataURL
+ * @param {string} sourceDataUrl - 再利用時に読み込む高解像度画像DataURL
  * @returns {Promise<string>} id
  */
-export async function saveThumbnail(dataUrl) {
+export async function saveThumbnail(dataUrl, sourceDataUrl = dataUrl) {
     const db = await openDB();
     const id = `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        store.put({ id, dataUrl, createdAt: Date.now() });
+        const record = { id, dataUrl, createdAt: Date.now() };
+        if (sourceDataUrl !== dataUrl) record.sourceDataUrl = sourceDataUrl;
+        store.put(record);
         tx.oncomplete = async () => {
             db.close();
             await pruneOld();
@@ -59,7 +62,7 @@ export async function loadThumbnail(id) {
         const req = store.get(id);
         req.onsuccess = () => {
             db.close();
-            resolve(req.result ? req.result.dataUrl : null);
+            resolve(req.result ? (req.result.sourceDataUrl || req.result.dataUrl) : null);
         };
         req.onerror = () => {
             db.close();
@@ -126,7 +129,8 @@ async function pruneOld() {
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        const req = store.index('createdAt').openCursor();
+        // 新しい順に10件を保持し、それより古いレコードを削除する。
+        const req = store.index('createdAt').openCursor(null, 'prev');
         let count = 0;
         const toDelete = [];
         req.onsuccess = (event) => {

@@ -25,6 +25,18 @@ describe('storage', () => {
         expect(loaded).not.toBeNull();
     });
 
+    it('U-S7: 履歴表示用画像とは別に高解像度の再利用画像を保持する', async () => {
+        const previewDataUrl = 'data:image/png;base64,preview';
+        const sourceDataUrl = 'data:image/png;base64,full-resolution-source';
+        const id = await saveThumbnail(previewDataUrl, sourceDataUrl);
+
+        const loaded = await loadThumbnail(id);
+        const [record] = await getAllThumbnails();
+
+        expect(loaded).toBe(sourceDataUrl);
+        expect(record.dataUrl).toBe(previewDataUrl);
+    });
+
     it('U-S6: 削除', async () => {
         const blob = new Blob(['test'], { type: 'image/png' });
         const id = await saveThumbnail(blob);
@@ -44,6 +56,10 @@ describe('storage', () => {
         }
 
         const thumbs = await getAllThumbnails();
-        expect(thumbs.length).toBeLessThanOrEqual(10);
+        expect(thumbs).toHaveLength(10);
+        const remainingIds = thumbs.map(thumb => thumb.id);
+        expect(remainingIds).toEqual(expect.arrayContaining(ids.slice(-10)));
+        expect(remainingIds).not.toContain(ids[0]);
+        expect(remainingIds).not.toContain(ids[1]);
     });
 });

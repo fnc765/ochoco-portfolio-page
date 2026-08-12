@@ -272,8 +272,9 @@ class FakeIDBObjectStore {
         this._data.delete(key);
         return { set onsuccess(fn) { fn(); }, set onerror(fn) {} };
     }
-    openCursor() {
+    openCursor(range, direction) {
         const entries = Array.from(this._data.values());
+        if (direction === 'prev' || direction === 'prevunique') entries.reverse();
         let index = -1;
         const req = {
             result: null,
@@ -296,7 +297,7 @@ class FakeIDBObjectStore {
     index(name) {
         // createdAt インデックス用
         return {
-            openCursor: (range, direction) => this.openCursor(),
+            openCursor: (range, direction) => this.openCursor(range, direction),
         };
     }
 }

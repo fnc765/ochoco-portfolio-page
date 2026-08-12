@@ -48,32 +48,6 @@ export function drawImageCover(ctx, img, dx, dy, dw, dh, displayW, displayH) {
         imgH = settingsH;
     }
 
-    // デバイスの向きと videoWidth/videoHeight の整合性を確認
-    // 縦持ち(portrait)なのに videoWidth > videoHeight → 回転前の値を返している可能性
-    const isPortrait = window.innerHeight > window.innerWidth;
-    const videoAspect = (imgW && imgH) ? imgW / imgH : 0;
-    const settingsAspect = (settingsW && settingsH) ? settingsW / settingsH : 0;
-
-    if (isPortrait && videoAspect > 1) {
-        // 縦持ちなのに横長判定 → getSettings() が縦長ならそちらを使う
-        if (settingsAspect && settingsAspect < 1) {
-            imgW = settingsW;
-            imgH = settingsH;
-        } else {
-            // 両方横長ならスワップして縦長に矯正
-            [imgW, imgH] = [imgH, imgW];
-        }
-    } else if (!isPortrait && videoAspect < 1) {
-        // 横持ちなのに縦長判定 → getSettings() が横長ならそちらを使う
-        if (settingsAspect && settingsAspect > 1) {
-            imgW = settingsW;
-            imgH = settingsH;
-        } else {
-            // 両方縦長ならスワップして横長に矯正
-            [imgW, imgH] = [imgH, imgW];
-        }
-    }
-
     if (!imgW || !imgH) {
         console.warn('[drawImageCover] 画像サイズが取得できないため fill で描画', img);
         ctx.drawImage(img, dx, dy, dw, dh);
@@ -99,12 +73,6 @@ export function drawImageCover(ctx, img, dx, dy, dw, dh, displayW, displayH) {
         sx = 0;
         sy = (imgH - sh) / 2;
     }
-
-    console.log('[drawImageCover]', {
-        imgW, imgH, srcAspect, destAspect,
-        isPortrait, videoAspect, settingsAspect,
-        sx, sy, sw, sh, dx, dy, dw, dh,
-    });
 
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 }
@@ -268,7 +236,9 @@ function drawFrameText(ctx, opts, scale, W, H) {
         x += ctx.measureText(FA_ICON_USER).width + gap;
         ctx.font = `400 ${metaSize}px ${fontFamily}`;
         ctx.fillStyle = '#000000';
-        ctx.fillText(opts.photographer, x, bottomY);
+        const maxPhotographerX = W / 2 - gap;
+        const photographer = truncateTextToWidth(ctx, opts.photographer, Math.max(0, maxPhotographerX - x));
+        ctx.fillText(photographer, x, bottomY);
     }
 
     // 日付・場所（右下：アイコン + 値 + アイコン + 値）
@@ -282,6 +252,25 @@ function drawFrameText(ctx, opts, scale, W, H) {
         if (hasDate) segs.push({ icon: FA_ICON_CALENDAR, text: formatDateMMDDYYYY(opts.date) });
         if (hasLoc) segs.push({ icon: FA_ICON_LOCATION, text: opts.location });
 
+        // 右半分をメタ情報の最大領域とし、場所が長い場合は省略する。
+        const maxTotalW = W / 2 - marginX - gap;
+        if (hasLoc) {
+            const locationSegment = segs[segs.length - 1];
+            const fixedSegments = segs.slice(0, -1);
+            const fixedWidth = fixedSegments.reduce((total, seg) => {
+                ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+                const iconW = ctx.measureText(seg.icon).width;
+                ctx.font = `400 ${metaSize}px ${fontFamily}`;
+                return total + iconW + gap + ctx.measureText(seg.text).width;
+            }, 0);
+            const interSegmentGap = gap * Math.max(0, segs.length - 1);
+            ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
+            const locationIconW = ctx.measureText(locationSegment.icon).width;
+            ctx.font = `400 ${metaSize}px ${fontFamily}`;
+            const availableTextWidth = Math.max(0, maxTotalW - fixedWidth - interSegmentGap - locationIconW - gap);
+            locationSegment.text = truncateTextToWidth(ctx, locationSegment.text, availableTextWidth);
+        }
+
         ctx.textBaseline = 'bottom';
         const widths = segs.map(seg => {
             ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
@@ -292,7 +281,7 @@ function drawFrameText(ctx, opts, scale, W, H) {
         });
         const totalW = widths.reduce((a, b) => a + b, 0) + gap * (segs.length - 1);
 
-        let x = W - marginX - totalW;
+        let x = Math.max(W / 2 + gap, W - marginX - totalW);
         segs.forEach((seg, i) => {
             ctx.font = `${FA_FONT_WEIGHT} ${metaSize}px ${FA_FONT}, ${fontFamily}`;
             ctx.fillStyle = META_ICON_COLOR;
@@ -304,6 +293,29 @@ function drawFrameText(ctx, opts, scale, W, H) {
             x += ctx.measureText(seg.text).width + gap;
         });
     }
+}
+
+/**
+ * Canvasテキストを指定幅に収め、必要なら末尾を省略記号にする。
+ */
+export function truncateTextToWidth(ctx, text, maxWidth) {
+    const value = String(text ?? '');
+    if (ctx.measureText(value).width <= maxWidth) return value;
+    if (maxWidth <= 0) return '';
+
+    const ellipsis = '…';
+    if (ctx.measureText(ellipsis).width > maxWidth) return '';
+    let low = 0;
+    let high = value.length;
+    while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (ctx.measureText(value.slice(0, middle) + ellipsis).width <= maxWidth) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    return value.slice(0, low) + ellipsis;
 }
 
 function fitFontSize(ctx, text, maxWidth, maxSize, fontFamily) {
